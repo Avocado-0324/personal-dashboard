@@ -291,7 +291,7 @@ export default function SettingsPage() {
                 {gmailConnected ? (
                   <button
                     onClick={async () => {
-                      await signOut({ redirect: false });
+                      await fetch('/api/gmail/disconnect', { method: 'POST' });
                       setGmailConnected(false);
                       setGmailEmail('');
                       router.refresh();
@@ -302,7 +302,10 @@ export default function SettingsPage() {
                   </button>
                 ) : (
                   <button
-                    onClick={() => signIn('google', { callbackUrl: '/settings' })}
+                    onClick={async () => {
+                      await fetch('/api/gmail/connect', { method: 'POST' });
+                      signIn('google', { callbackUrl: '/settings' });
+                    }}
                     className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
                   >
                     连接
@@ -339,8 +342,8 @@ export default function SettingsPage() {
                   </button>
                 ) : (
                   <button
-                    onClick={() => {
-                      document.cookie = 'pd_github_disconnected=; path=/; max-age=0';
+                    onClick={async () => {
+                      await fetch('/api/github/connect', { method: 'POST' });
                       signIn('github', { callbackUrl: '/settings' });
                     }}
                     className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"

@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import { auth } from '@/lib/auth';
+import { cookies } from 'next/headers';
 
 export type GmailConnectorStatus = {
   ready: boolean;
@@ -18,6 +19,13 @@ export type UnreadEmail = {
 
 export async function getGmailStatus(): Promise<GmailConnectorStatus> {
   try {
+    const cookieStore = await cookies();
+    const disconnectedCookie = cookieStore.get('pd_gmail_disconnected');
+    
+    if (disconnectedCookie?.value === '1') {
+      return { ready: false };
+    }
+
     const session = await auth();
     
     const googleToken = (session as any)?.googleAccessToken || (session as any)?.accessToken;
@@ -41,6 +49,13 @@ export async function fetchUnreadEmails(): Promise<{
   emails: UnreadEmail[];
   totalCount: number;
 }> {
+  const cookieStore = await cookies();
+  const disconnectedCookie = cookieStore.get('pd_gmail_disconnected');
+  
+  if (disconnectedCookie?.value === '1') {
+    throw new Error('Gmail disconnected');
+  }
+
   const session = await auth();
   
   const googleToken = (session as any)?.googleAccessToken || (session as any)?.accessToken;
