@@ -27,18 +27,6 @@ const themeLabels = {
 };
 
 export function Card({ result, onRefresh }: Props) {
-  if (result.status === 'unconfigured') {
-    return (
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-bold mb-4">育儿 Tips</h2>
-        <div className="text-gray-500 text-center py-8">
-          <p>未配置</p>
-          <p className="text-sm mt-2">请在设置中配置宝宝年龄和关注主题</p>
-        </div>
-      </div>
-    );
-  }
-
   if (result.status === 'error') {
     return (
       <div className="bg-white rounded-lg shadow p-6">

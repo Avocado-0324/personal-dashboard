@@ -4,7 +4,7 @@
 
 ## 项目状态
 
-**当前版本**：M2 - GitHub 真实接入  
+**当前版本**：M3 - 育儿 Tips 配置化  
 **架构版本**：v0.2 (冻结)
 
 ## 快速开始
@@ -108,14 +108,19 @@ npm start
 - **权限范围**：`https://www.googleapis.com/auth/gmail.readonly`
 - **连接方式**：在设置页面通过 Google OAuth 2.0 连接
 
-### 2. 育儿 Tips (parenting-tips)
+### 2. 育儿 Tips (parenting-tips) - ✅ M3 配置化筛选
 
 - **功能**：根据宝宝年龄和关注主题推荐育儿建议
-- **数据源**：静态内容池
+- **数据源**：静态内容池（20 条专业建议）
 - **配置项**：
   - 宝宝年龄段：0-6个月 / 6-12个月 / 1-2岁 / 2-3岁 / 3岁以上
-  - 关注主题：睡眠 / 喂养 / 玩耍 / 健康 / 情绪
+  - 关注主题：睡眠 / 喂养 / 玩耍 / 健康 / 情绪（可多选）
 - **显示数量**：1-3 条
+- **特性**：
+  - 未配置时显示通用建议（`personalized: false`）
+  - 配置后按年龄段和主题智能筛选（`personalized: true`）
+  - 支持「换一批」刷新
+  - 筛选后无结果时显示友好提示
 
 ### 3. GitHub 活跃度 (github-activity) - ✅ M2 真实接入
 
@@ -342,8 +347,8 @@ export type UserSettings = {
 
 - **M0**：✅ 脚手架 + 三模块 mock 数据 + 基础 UI
 - **M1**：✅ mail-todos 接入真实 Gmail API
-- **M2（当前）**：✅ github-activity 接入真实 GitHub API
-- **M3**：完善错误处理 + 打磨体验
+- **M2**：✅ github-activity 接入真实 GitHub API
+- **M3（当前）**：✅ parenting-tips 按年龄段/主题配置化筛选
 
 ## 文档
 
