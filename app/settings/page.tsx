@@ -217,7 +217,9 @@ export default function SettingsPage() {
         {/* 育儿配置 */}
         <section className="bg-white rounded-lg shadow p-6">
           <h2 className="text-xl font-bold mb-4">育儿配置</h2>
-          
+          <p className="text-sm text-gray-600 mb-4">
+            根据宝宝年龄段和关注主题，首页将推荐更匹配的育儿建议。跳过配置也可使用，将显示通用建议。
+          </p>
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
