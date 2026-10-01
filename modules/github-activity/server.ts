@@ -22,6 +22,11 @@ export async function load(ctx: ModuleContext): Promise<ModuleLoadResult<GithubA
 
   const login = ctx.connectors.github.displayName || 'Avocado-0324';
 
+  // 演示模式：空状态
+  if (ctx.demoMode === 'empty') {
+    return { status: 'empty', hint: '最近7天无活动（演示模式）' };
+  }
+
   // M0: 返回 mock 数据
   // M1+ 将接入真实 GitHub API
   const mockData: GithubActivityData = {

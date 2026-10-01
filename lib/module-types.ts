@@ -26,6 +26,7 @@ export type UserSettings = {
 export type ModuleContext = {
   settings: UserSettings;
   connectors: Partial<Record<ConnectorId, { ready: boolean; displayName?: string }>>;
+  demoMode?: 'normal' | 'disconnected' | 'empty';
 };
 
 export type ModuleStatus = 'ok' | 'unconfigured' | 'disconnected' | 'empty' | 'error';

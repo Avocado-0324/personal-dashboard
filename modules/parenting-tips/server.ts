@@ -57,6 +57,14 @@ export async function load(ctx: ModuleContext): Promise<ModuleLoadResult<Parenti
 
   const personalized = !!(ageBand || (themes && themes.length > 0));
 
+  // 演示模式：空状态
+  if (ctx.demoMode === 'empty') {
+    return {
+      status: 'empty',
+      hint: '未找到匹配的育儿建议（演示模式）',
+    };
+  }
+
   // M0: 简单随机选择 2-3 条
   // M1+: 根据 ageBand 和 themes 做筛选
   let selectedTips = [...tipsPool];

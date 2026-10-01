@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { initializeModules } from '@/modules';
 import { getAllModules } from '@/lib/module-registry';
@@ -14,12 +14,24 @@ export default function SettingsPage() {
   const router = useRouter();
   const allModules = getAllModules();
   const [settings, setSettings] = useState(getUserSettings());
+  const [demoMode, setDemoMode] = useState<'normal' | 'disconnected' | 'empty'>('normal');
+
+  // 从 cookie 读取演示模式
+  useEffect(() => {
+    const cookies = document.cookie.split(';');
+    const demoModeCookie = cookies.find(c => c.trim().startsWith('demo_mode='));
+    if (demoModeCookie) {
+      const value = demoModeCookie.split('=')[1] as 'normal' | 'disconnected' | 'empty';
+      setDemoMode(value || 'normal');
+    }
+  }, []);
 
   const handleToggleModule = (moduleId: string) => {
     const currentEnabled = (settings.modules as any)[moduleId]?.enabled !== false;
     toggleModule(moduleId, !currentEnabled);
     setSettings(getUserSettings());
-    router.refresh();
+    // 刷新页面以重新加载服务端组件
+    setTimeout(() => router.refresh(), 100);
   };
 
   const handleUpdateConfig = (key: string, value: any) => {
@@ -30,6 +42,17 @@ export default function SettingsPage() {
       },
     });
     setSettings(getUserSettings());
+    setTimeout(() => router.refresh(), 100);
+  };
+
+  const handleDemoModeChange = (mode: 'normal' | 'disconnected' | 'empty') => {
+    setDemoMode(mode);
+    // 设置 cookie
+    const expires = new Date();
+    expires.setDate(expires.getDate() + 30);
+    document.cookie = `demo_mode=${mode}; path=/; expires=${expires.toUTCString()}`;
+    // 刷新页面
+    setTimeout(() => router.refresh(), 100);
   };
 
   const ageBands = [
@@ -103,6 +126,49 @@ export default function SettingsPage() {
           </div>
         </section>
 
+        {/* 演示模式 */}
+        <section className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-xl font-bold mb-4">演示模式（M0 测试）</h2>
+          <p className="text-sm text-gray-600 mb-4">
+            用于测试模块的不同状态（断连、空数据等）
+          </p>
+          <div className="space-y-2">
+            <button
+              onClick={() => handleDemoModeChange('normal')}
+              className={`w-full px-4 py-3 rounded border text-left ${
+                demoMode === 'normal'
+                  ? 'bg-blue-100 border-blue-500 text-blue-900'
+                  : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <div className="font-medium">正常模式</div>
+              <div className="text-sm text-gray-600">显示 mock 数据</div>
+            </button>
+            <button
+              onClick={() => handleDemoModeChange('disconnected')}
+              className={`w-full px-4 py-3 rounded border text-left ${
+                demoMode === 'disconnected'
+                  ? 'bg-blue-100 border-blue-500 text-blue-900'
+                  : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <div className="font-medium">断连模式</div>
+              <div className="text-sm text-gray-600">模拟 Gmail/GitHub 未连接</div>
+            </button>
+            <button
+              onClick={() => handleDemoModeChange('empty')}
+              className={`w-full px-4 py-3 rounded border text-left ${
+                demoMode === 'empty'
+                  ? 'bg-blue-100 border-blue-500 text-blue-900'
+                  : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <div className="font-medium">空数据模式</div>
+              <div className="text-sm text-gray-600">模拟无数据状态</div>
+            </button>
+          </div>
+        </section>
+
         {/* 育儿配置 */}
         <section className="bg-white rounded-lg shadow p-6">
           <h2 className="text-xl font-bold mb-4">育儿配置</h2>
@@ -168,8 +234,12 @@ export default function SettingsPage() {
                 <span className="font-medium">Gmail</span>
                 <span className="text-sm text-gray-600 ml-2">user@gmail.com</span>
               </div>
-              <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
-                已连接
+              <span className={`text-xs px-2 py-1 rounded ${
+                demoMode === 'disconnected' 
+                  ? 'bg-red-100 text-red-800' 
+                  : 'bg-green-100 text-green-800'
+              }`}>
+                {demoMode === 'disconnected' ? '未连接（演示）' : '已连接'}
               </span>
             </div>
             <div className="flex items-center justify-between p-3 border border-gray-200 rounded">
@@ -177,8 +247,12 @@ export default function SettingsPage() {
                 <span className="font-medium">GitHub</span>
                 <span className="text-sm text-gray-600 ml-2">@Avocado-0324</span>
               </div>
-              <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
-                已连接
+              <span className={`text-xs px-2 py-1 rounded ${
+                demoMode === 'disconnected' 
+                  ? 'bg-red-100 text-red-800' 
+                  : 'bg-green-100 text-green-800'
+              }`}>
+                {demoMode === 'disconnected' ? '未连接（演示）' : '已连接'}
               </span>
             </div>
           </div>

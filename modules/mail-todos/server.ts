@@ -18,6 +18,11 @@ export async function load(ctx: ModuleContext): Promise<ModuleLoadResult<MailTod
     return { status: 'disconnected', connector: 'gmail' };
   }
 
+  // 演示模式：空状态
+  if (ctx.demoMode === 'empty') {
+    return { status: 'empty', hint: '收件箱无未读邮件（演示模式）' };
+  }
+
   // M0: 返回 mock 数据
   // M1+ 将接入真实 Gmail API
   const mockData: MailTodosData = {

@@ -1,28 +1,41 @@
 import Link from 'next/link';
+import { cookies } from 'next/headers';
 import { initializeModules } from '@/modules';
 import { getEnabledModules } from '@/lib/module-registry';
-import { getUserSettings } from '@/lib/user-settings';
+import { getUserSettingsFromCookie } from '@/lib/user-settings';
 import { ModuleCard } from './components/ModuleCard';
 
 // 初始化模块注册
 initializeModules();
 
 export default async function HomePage() {
-  const userSettings = getUserSettings();
+  // 从 cookie 读取用户设置
+  const cookieStore = await cookies();
+  const settingsCookie = cookieStore.get('user_settings');
+  const userSettings = getUserSettingsFromCookie(settingsCookie?.value);
+  
   const enabledModules = getEnabledModules(userSettings);
 
-  // 模拟连接器状态（M0：默认已连接）
-  const mockConnectors = {
-    gmail: { ready: true, displayName: 'user@gmail.com' },
-    github: { ready: true, displayName: 'Avocado-0324' },
-  };
+  // 模拟连接器状态（M0：支持演示模式）
+  // 从 query 或 cookie 读取演示模式状态
+  const demoModeCookie = cookieStore.get('demo_mode');
+  const demoMode = demoModeCookie?.value || 'normal'; // normal | disconnected | empty
+  
+  const mockConnectors = demoMode === 'disconnected' 
+    ? { gmail: { ready: false }, github: { ready: false } }
+    : { gmail: { ready: true, displayName: 'user@gmail.com' }, github: { ready: true, displayName: 'Avocado-0324' } };
 
   // 在服务端加载所有模块数据
-  const moduleContext = { settings: userSettings, connectors: mockConnectors };
+  const moduleContext = { 
+    settings: userSettings, 
+    connectors: mockConnectors,
+    demoMode: demoMode as 'normal' | 'disconnected' | 'empty',
+  };
+  
   const moduleResults = await Promise.allSettled(
     enabledModules.map(async (module) => ({
       id: module.manifest.id,
-      result: await module.load(moduleContext),
+      result: await module.load(moduleContext as any),
       Card: module.Card,
     }))
   );
