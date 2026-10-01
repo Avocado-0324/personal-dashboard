@@ -1,60 +1,40 @@
 import type { ModuleContext, ModuleLoadResult } from '@/lib/module-types';
 import type { GithubActivityData } from './types';
+import { fetchGithubActivity } from '@/lib/connectors/github';
 
 export async function load(ctx: ModuleContext): Promise<ModuleLoadResult<GithubActivityData>> {
-  // 检查 GitHub 连接状态
   if (!ctx.connectors.github?.ready) {
     return { status: 'disconnected', connector: 'github' };
   }
 
-  const login = ctx.connectors.github.displayName || 'Avocado-0324';
-
-  // 演示模式：空状态
   if (ctx.demoMode === 'empty') {
-    return { status: 'empty', hint: '最近7天无活动（演示模式）' };
+    return { status: 'empty', hint: '最近7天无活动' };
   }
 
-  // M0: 返回 mock 数据
-  // M1+ 将接入真实 GitHub API
-  const mockData: GithubActivityData = {
-    windowDays: 7,
-    summary: {
-      commits: 12,
-      pullRequests: 3,
-      reviews: 5,
-    },
-    items: [
-      {
-        id: '1',
-        repo: 'personal-dashboard',
-        type: 'commit',
-        title: '添加模块系统基础架构',
-        at: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-        url: 'https://github.com/Avocado-0324/personal-dashboard',
-      },
-      {
-        id: '2',
-        repo: 'project-alpha',
-        type: 'pr',
-        title: 'Feature: 实现用户认证模块',
-        at: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-        url: 'https://github.com/Avocado-0324/project-alpha',
-      },
-      {
-        id: '3',
-        repo: 'open-source-lib',
-        type: 'review',
-        title: 'Review: 优化性能问题',
-        at: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(),
-        url: 'https://github.com/community/open-source-lib',
-      },
-    ],
-    login,
-  };
+  try {
+    const { activities, summary, login } = await fetchGithubActivity();
 
-  return {
-    status: 'ok',
-    data: mockData,
-    fetchedAt: new Date().toISOString(),
-  };
+    if (activities.length === 0 && summary.commits === 0 && summary.pullRequests === 0 && summary.reviews === 0) {
+      return { status: 'empty', hint: '最近7天无活动' };
+    }
+
+    const data: GithubActivityData = {
+      windowDays: 7,
+      summary,
+      items: activities,
+      login,
+    };
+
+    return {
+      status: 'ok',
+      data,
+      fetchedAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    return {
+      status: 'error',
+      message: error instanceof Error ? error.message : 'Failed to fetch GitHub activity',
+      retryable: true,
+    };
+  }
 }

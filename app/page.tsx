@@ -5,6 +5,7 @@ import { getEnabledModules } from '@/lib/module-registry';
 import { getUserSettingsFromCookie } from '@/lib/user-settings';
 import { ModuleCard } from './components/ModuleCard';
 import { getGmailStatus } from '@/lib/connectors/gmail';
+import { getGithubStatus } from '@/lib/connectors/github';
 
 initializeModules();
 
@@ -19,12 +20,11 @@ export default async function HomePage() {
   const demoMode = demoModeCookie?.value || undefined;
   
   const gmailStatus = await getGmailStatus();
+  const githubStatus = await getGithubStatus();
   
   const connectors = {
-    gmail: gmailStatus,
-    github: demoMode === 'disconnected' 
-      ? { ready: false } 
-      : { ready: true, displayName: 'Avocado-0324' }
+    gmail: demoMode === 'disconnected' ? { ready: false } : gmailStatus,
+    github: demoMode === 'disconnected' ? { ready: false } : githubStatus,
   };
 
   const moduleContext = { 
