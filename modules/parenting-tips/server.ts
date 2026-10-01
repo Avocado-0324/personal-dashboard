@@ -1,7 +1,6 @@
 import type { ModuleContext, ModuleLoadResult } from '@/lib/module-types';
 import type { ParentingTipsData } from './types';
-import fs from 'fs';
-import path from 'path';
+import tipsPool from './data/tips.json';
 
 type TipPoolItem = {
   id: string;
@@ -10,17 +9,6 @@ type TipPoolItem = {
   theme: 'sleep' | 'feeding' | 'play' | 'health' | 'emotion';
   ageBands: Array<'0-6m' | '6-12m' | '1-2y' | '2-3y' | '3y+'>;
 };
-
-let tipsPool: TipPoolItem[] | null = null;
-
-function loadTipsPool(): TipPoolItem[] {
-  if (tipsPool === null) {
-    const filePath = path.join(process.cwd(), 'modules/parenting-tips/data/tips.json');
-    const fileContent = fs.readFileSync(filePath, 'utf-8');
-    tipsPool = JSON.parse(fileContent);
-  }
-  return tipsPool!;
-}
 
 export async function load(ctx: ModuleContext): Promise<ModuleLoadResult<ParentingTipsData>> {
   const ageBand = ctx.settings.config['parenting.ageBand'];
@@ -36,8 +24,8 @@ export async function load(ctx: ModuleContext): Promise<ModuleLoadResult<Parenti
     };
   }
 
-  // 加载静态内容池
-  const allTips = loadTipsPool();
+  // 使用静态导入的内容池
+  const allTips = tipsPool as TipPoolItem[];
   
   // 按配置筛选
   let selectedTips = [...allTips];
