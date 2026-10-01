@@ -4,38 +4,39 @@ import { initializeModules } from '@/modules';
 import { getEnabledModules } from '@/lib/module-registry';
 import { getUserSettingsFromCookie } from '@/lib/user-settings';
 import { ModuleCard } from './components/ModuleCard';
+import { getGmailStatus } from '@/lib/connectors/gmail';
 
-// 初始化模块注册
 initializeModules();
 
 export default async function HomePage() {
-  // 从 cookie 读取用户设置
   const cookieStore = await cookies();
   const settingsCookie = cookieStore.get('user_settings');
   const userSettings = getUserSettingsFromCookie(settingsCookie?.value);
   
   const enabledModules = getEnabledModules(userSettings);
 
-  // 模拟连接器状态（M0：支持演示模式）
-  // 从 query 或 cookie 读取演示模式状态
   const demoModeCookie = cookieStore.get('demo_mode');
-  const demoMode = demoModeCookie?.value || 'normal'; // normal | disconnected | empty
+  const demoMode = demoModeCookie?.value || undefined;
   
-  const mockConnectors = demoMode === 'disconnected' 
-    ? { gmail: { ready: false }, github: { ready: false } }
-    : { gmail: { ready: true, displayName: 'user@gmail.com' }, github: { ready: true, displayName: 'Avocado-0324' } };
+  const gmailStatus = await getGmailStatus();
+  
+  const connectors = {
+    gmail: gmailStatus,
+    github: demoMode === 'disconnected' 
+      ? { ready: false } 
+      : { ready: true, displayName: 'Avocado-0324' }
+  };
 
-  // 在服务端加载所有模块数据
   const moduleContext = { 
     settings: userSettings, 
-    connectors: mockConnectors,
-    demoMode: demoMode as 'normal' | 'disconnected' | 'empty',
+    connectors,
+    demoMode: demoMode as 'normal' | 'disconnected' | 'empty' | undefined,
   };
-  
+
   const moduleResults = await Promise.allSettled(
     enabledModules.map(async (module) => ({
       id: module.manifest.id,
-      result: await module.load(moduleContext as any),
+      result: await module.load(moduleContext),
       Card: module.Card,
     }))
   );

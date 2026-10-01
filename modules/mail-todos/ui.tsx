@@ -1,7 +1,7 @@
 'use client';
 
 import type { ModuleLoadResult } from '@/lib/module-types';
-import type { MailTodosData } from './server';
+import type { MailTodosData } from './types';
 
 type Props = {
   result: ModuleLoadResult<MailTodosData>;
@@ -126,7 +126,7 @@ export function Card({ result, onRefresh }: Props) {
       {data.totalCount > data.items.length && (
         <div className="mt-4 text-center">
           <a
-            href="https://mail.google.com/mail/u/0/#inbox"
+            href="https://mail.google.com/mail/u/0/#search/is%3Aunread"
             target="_blank"
             rel="noopener noreferrer"
             className="text-sm text-blue-600 hover:text-blue-800"

@@ -2,21 +2,44 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { initializeModules } from '@/modules';
-import { getAllModules } from '@/lib/module-registry';
 import { getUserSettings, toggleModule, updateUserSettings } from '@/lib/user-settings';
 import { useRouter } from 'next/navigation';
+import { signIn, signOut } from 'next-auth/react';
 
-// 初始化模块注册
-initializeModules();
+const allModulesConfig = [
+  {
+    manifest: {
+      id: 'mail-todos' as const,
+      name: '邮件待办',
+      description: '显示收件箱未读邮件',
+      requires: ['gmail'],
+    }
+  },
+  {
+    manifest: {
+      id: 'parenting-tips' as const,
+      name: '育儿 Tips',
+      description: '根据宝宝年龄推荐育儿建议',
+      requires: [],
+    }
+  },
+  {
+    manifest: {
+      id: 'github-activity' as const,
+      name: 'GitHub 活跃度',
+      description: '显示最近 7 天的代码活动',
+      requires: ['github'],
+    }
+  },
+];
 
 export default function SettingsPage() {
   const router = useRouter();
-  const allModules = getAllModules();
   const [settings, setSettings] = useState(getUserSettings());
   const [demoMode, setDemoMode] = useState<'normal' | 'disconnected' | 'empty'>('normal');
+  const [gmailConnected, setGmailConnected] = useState(false);
+  const [gmailEmail, setGmailEmail] = useState('');
 
-  // 从 cookie 读取演示模式
   useEffect(() => {
     const cookies = document.cookie.split(';');
     const demoModeCookie = cookies.find(c => c.trim().startsWith('demo_mode='));
@@ -24,6 +47,16 @@ export default function SettingsPage() {
       const value = demoModeCookie.split('=')[1] as 'normal' | 'disconnected' | 'empty';
       setDemoMode(value || 'normal');
     }
+
+    fetch('/api/gmail/status')
+      .then(res => res.json())
+      .then(data => {
+        setGmailConnected(data.connected);
+        setGmailEmail(data.email || '');
+      })
+      .catch(() => {
+        setGmailConnected(false);
+      });
   }, []);
 
   const handleToggleModule = (moduleId: string) => {
@@ -92,7 +125,7 @@ export default function SettingsPage() {
         <section className="bg-white rounded-lg shadow p-6">
           <h2 className="text-xl font-bold mb-4">模块管理</h2>
           <div className="space-y-4">
-            {allModules.map((module) => {
+            {allModulesConfig.map((module) => {
               const enabled = settings.modules[module.manifest.id]?.enabled !== false;
               return (
                 <div
@@ -225,22 +258,45 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        {/* 连接器状态（M0: 静态显示） */}
         <section className="bg-white rounded-lg shadow p-6">
           <h2 className="text-xl font-bold mb-4">连接状态</h2>
           <div className="space-y-3">
             <div className="flex items-center justify-between p-3 border border-gray-200 rounded">
-              <div>
-                <span className="font-medium">Gmail</span>
-                <span className="text-sm text-gray-600 ml-2">user@gmail.com</span>
+              <div className="flex-1">
+                <div className="font-medium">Gmail</div>
+                {gmailConnected && gmailEmail && (
+                  <div className="text-sm text-gray-600">{gmailEmail}</div>
+                )}
               </div>
-              <span className={`text-xs px-2 py-1 rounded ${
-                demoMode === 'disconnected' 
-                  ? 'bg-red-100 text-red-800' 
-                  : 'bg-green-100 text-green-800'
-              }`}>
-                {demoMode === 'disconnected' ? '未连接（演示）' : '已连接'}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs px-2 py-1 rounded ${
+                  gmailConnected 
+                    ? 'bg-green-100 text-green-800' 
+                    : 'bg-red-100 text-red-800'
+                }`}>
+                  {gmailConnected ? '已连接' : '未连接'}
+                </span>
+                {gmailConnected ? (
+                  <button
+                    onClick={async () => {
+                      await signOut({ redirect: false });
+                      setGmailConnected(false);
+                      setGmailEmail('');
+                      router.refresh();
+                    }}
+                    className="text-xs px-3 py-1 bg-red-100 text-red-800 rounded hover:bg-red-200"
+                  >
+                    断开
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => signIn('google', { callbackUrl: '/settings' })}
+                    className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    连接
+                  </button>
+                )}
+              </div>
             </div>
             <div className="flex items-center justify-between p-3 border border-gray-200 rounded">
               <div>
@@ -252,12 +308,12 @@ export default function SettingsPage() {
                   ? 'bg-red-100 text-red-800' 
                   : 'bg-green-100 text-green-800'
               }`}>
-                {demoMode === 'disconnected' ? '未连接（演示）' : '已连接'}
+                {demoMode === 'disconnected' ? '未连接（演示）' : '已连接（演示）'}
               </span>
             </div>
           </div>
           <p className="text-xs text-gray-500 mt-4">
-            M0 阶段：连接器状态为模拟数据，M1+ 将接入真实 OAuth
+            M1: Gmail 接入真实 OAuth；GitHub 仍为演示数据
           </p>
         </section>
       </main>
