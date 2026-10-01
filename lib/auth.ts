@@ -28,24 +28,26 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   callbacks: {
     async jwt({ token, account, profile }) {
       if (account) {
-        token.accessToken = account.access_token;
-        token.refreshToken = account.refresh_token;
-        token.expiresAt = account.expires_at;
-        token.provider = account.provider;
-        
-        if (account.provider === 'github' && profile) {
-          token.githubLogin = (profile as any).login;
+        if (account.provider === 'google') {
+          token.googleAccessToken = account.access_token;
+          token.googleRefreshToken = account.refresh_token;
+          token.googleExpiresAt = account.expires_at;
+        } else if (account.provider === 'github') {
+          token.githubAccessToken = account.access_token;
+          token.githubLogin = (profile as any)?.login;
         }
       }
       return token;
     },
     async session({ session, token }) {
-      (session as any).accessToken = token.accessToken;
-      (session as any).refreshToken = token.refreshToken;
-      (session as any).expiresAt = token.expiresAt;
-      (session as any).provider = token.provider;
+      if (token.googleAccessToken) {
+        (session as any).googleAccessToken = token.googleAccessToken;
+        (session as any).googleRefreshToken = token.googleRefreshToken;
+        (session as any).googleExpiresAt = token.googleExpiresAt;
+      }
       
-      if (token.githubLogin) {
+      if (token.githubAccessToken) {
+        (session as any).githubAccessToken = token.githubAccessToken;
         (session as any).githubLogin = token.githubLogin;
       }
       

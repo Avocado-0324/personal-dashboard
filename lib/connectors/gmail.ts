@@ -20,7 +20,8 @@ export async function getGmailStatus(): Promise<GmailConnectorStatus> {
   try {
     const session = await auth();
     
-    if (!session || !(session as any).accessToken) {
+    const googleToken = (session as any)?.googleAccessToken || (session as any)?.accessToken;
+    if (!session || !googleToken) {
       return { ready: false };
     }
 
@@ -42,7 +43,8 @@ export async function fetchUnreadEmails(): Promise<{
 }> {
   const session = await auth();
   
-  if (!session || !(session as any).accessToken) {
+  const googleToken = (session as any)?.googleAccessToken || (session as any)?.accessToken;
+  if (!session || !googleToken) {
     throw new Error('Not authenticated');
   }
 
@@ -51,9 +53,10 @@ export async function fetchUnreadEmails(): Promise<{
     process.env.GOOGLE_CLIENT_SECRET
   );
 
+  const googleRefreshToken = (session as any)?.googleRefreshToken || (session as any)?.refreshToken;
   oauth2Client.setCredentials({
-    access_token: (session as any).accessToken,
-    refresh_token: (session as any).refreshToken,
+    access_token: googleToken,
+    refresh_token: googleRefreshToken,
   });
 
   const gmail = google.gmail({ version: 'v1', auth: oauth2Client });

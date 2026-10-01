@@ -328,7 +328,7 @@ export default function SettingsPage() {
                 {githubConnected ? (
                   <button
                     onClick={async () => {
-                      await signOut({ redirect: false });
+                      await fetch('/api/github/disconnect', { method: 'POST' });
                       setGithubConnected(false);
                       setGithubLogin('');
                       router.refresh();
@@ -339,7 +339,10 @@ export default function SettingsPage() {
                   </button>
                 ) : (
                   <button
-                    onClick={() => signIn('github', { callbackUrl: '/settings' })}
+                    onClick={() => {
+                      document.cookie = 'pd_github_disconnected=; path=/; max-age=0';
+                      signIn('github', { callbackUrl: '/settings' });
+                    }}
                     className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
                   >
                     连接
