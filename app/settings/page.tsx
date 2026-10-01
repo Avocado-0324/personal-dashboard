@@ -39,6 +39,8 @@ export default function SettingsPage() {
   const [demoMode, setDemoMode] = useState<'normal' | 'disconnected' | 'empty'>('normal');
   const [gmailConnected, setGmailConnected] = useState(false);
   const [gmailEmail, setGmailEmail] = useState('');
+  const [githubConnected, setGithubConnected] = useState(false);
+  const [githubLogin, setGithubLogin] = useState('');
 
   useEffect(() => {
     const cookies = document.cookie.split(';');
@@ -56,6 +58,16 @@ export default function SettingsPage() {
       })
       .catch(() => {
         setGmailConnected(false);
+      });
+
+    fetch('/api/github/status')
+      .then(res => res.json())
+      .then(data => {
+        setGithubConnected(data.connected);
+        setGithubLogin(data.login || '');
+      })
+      .catch(() => {
+        setGithubConnected(false);
       });
   }, []);
 
@@ -279,7 +291,7 @@ export default function SettingsPage() {
                 {gmailConnected ? (
                   <button
                     onClick={async () => {
-                      await signOut({ redirect: false });
+                      await fetch('/api/gmail/disconnect', { method: 'POST' });
                       setGmailConnected(false);
                       setGmailEmail('');
                       router.refresh();
@@ -290,7 +302,10 @@ export default function SettingsPage() {
                   </button>
                 ) : (
                   <button
-                    onClick={() => signIn('google', { callbackUrl: '/settings' })}
+                    onClick={async () => {
+                      await fetch('/api/gmail/connect', { method: 'POST' });
+                      signIn('google', { callbackUrl: '/settings' });
+                    }}
                     className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
                   >
                     连接
@@ -299,22 +314,46 @@ export default function SettingsPage() {
               </div>
             </div>
             <div className="flex items-center justify-between p-3 border border-gray-200 rounded">
-              <div>
-                <span className="font-medium">GitHub</span>
-                <span className="text-sm text-gray-600 ml-2">@Avocado-0324</span>
+              <div className="flex-1">
+                <div className="font-medium">GitHub</div>
+                {githubConnected && githubLogin && (
+                  <div className="text-sm text-gray-600">@{githubLogin}</div>
+                )}
               </div>
-              <span className={`text-xs px-2 py-1 rounded ${
-                demoMode === 'disconnected' 
-                  ? 'bg-red-100 text-red-800' 
-                  : 'bg-green-100 text-green-800'
-              }`}>
-                {demoMode === 'disconnected' ? '未连接（演示）' : '已连接（演示）'}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs px-2 py-1 rounded ${
+                  githubConnected 
+                    ? 'bg-green-100 text-green-800' 
+                    : 'bg-red-100 text-red-800'
+                }`}>
+                  {githubConnected ? '已连接' : '未连接'}
+                </span>
+                {githubConnected ? (
+                  <button
+                    onClick={async () => {
+                      await fetch('/api/github/disconnect', { method: 'POST' });
+                      setGithubConnected(false);
+                      setGithubLogin('');
+                      router.refresh();
+                    }}
+                    className="text-xs px-3 py-1 bg-red-100 text-red-800 rounded hover:bg-red-200"
+                  >
+                    断开
+                  </button>
+                ) : (
+                  <button
+                    onClick={async () => {
+                      await fetch('/api/github/connect', { method: 'POST' });
+                      signIn('github', { callbackUrl: '/settings' });
+                    }}
+                    className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    连接
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-          <p className="text-xs text-gray-500 mt-4">
-            M1: Gmail 接入真实 OAuth；GitHub 仍为演示数据
-          </p>
         </section>
       </main>
     </div>

@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import { auth } from '@/lib/auth';
+import { cookies } from 'next/headers';
 
 export type GmailConnectorStatus = {
   ready: boolean;
@@ -18,9 +19,17 @@ export type UnreadEmail = {
 
 export async function getGmailStatus(): Promise<GmailConnectorStatus> {
   try {
+    const cookieStore = await cookies();
+    const disconnectedCookie = cookieStore.get('pd_gmail_disconnected');
+    
+    if (disconnectedCookie?.value === '1') {
+      return { ready: false };
+    }
+
     const session = await auth();
     
-    if (!session || !(session as any).accessToken) {
+    const googleToken = (session as any)?.googleAccessToken || (session as any)?.accessToken;
+    if (!session || !googleToken) {
       return { ready: false };
     }
 
@@ -40,9 +49,17 @@ export async function fetchUnreadEmails(): Promise<{
   emails: UnreadEmail[];
   totalCount: number;
 }> {
+  const cookieStore = await cookies();
+  const disconnectedCookie = cookieStore.get('pd_gmail_disconnected');
+  
+  if (disconnectedCookie?.value === '1') {
+    throw new Error('Gmail disconnected');
+  }
+
   const session = await auth();
   
-  if (!session || !(session as any).accessToken) {
+  const googleToken = (session as any)?.googleAccessToken || (session as any)?.accessToken;
+  if (!session || !googleToken) {
     throw new Error('Not authenticated');
   }
 
@@ -51,9 +68,10 @@ export async function fetchUnreadEmails(): Promise<{
     process.env.GOOGLE_CLIENT_SECRET
   );
 
+  const googleRefreshToken = (session as any)?.googleRefreshToken || (session as any)?.refreshToken;
   oauth2Client.setCredentials({
-    access_token: (session as any).accessToken,
-    refresh_token: (session as any).refreshToken,
+    access_token: googleToken,
+    refresh_token: googleRefreshToken,
   });
 
   const gmail = google.gmail({ version: 'v1', auth: oauth2Client });

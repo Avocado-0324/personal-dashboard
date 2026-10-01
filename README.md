@@ -4,7 +4,7 @@
 
 ## 项目状态
 
-**当前版本**：M1 - Gmail 真实接入  
+**当前版本**：M2 - GitHub 真实接入  
 **架构版本**：v0.2 (冻结)
 
 ## 快速开始
@@ -39,13 +39,39 @@ cp .env.example .env.local
      - `http://localhost:3000/api/auth/callback/google` (本地开发)
      - `https://your-domain.com/api/auth/callback/google` (生产环境)
    - 点击「创建」，保存客户端 ID 和客户端密钥
-5. 将凭证填入 `.env.local`：
+
+#### 获取 GitHub OAuth 凭证
+
+1. 访问 [GitHub Developer Settings](https://github.com/settings/developers)
+2. 点击「OAuth Apps」→「New OAuth App」
+3. 填写应用信息：
+   - **Application name**：Personal Dashboard (或自定义)
+   - **Homepage URL**：`http://localhost:3000` (本地开发)
+   - **Authorization callback URL**：
+     - `http://localhost:3000/api/auth/callback/github` (本地开发)
+     - `https://your-domain.com/api/auth/callback/github` (生产环境)
+4. 点击「Register application」
+5. 在应用详情页生成 Client Secret
+6. 保存 Client ID 和 Client Secret
+
+**权限范围说明**：
+- `read:user`：读取用户基本信息
+- `user:email`：读取用户邮箱
+- 应用会请求访问用户的公开活动记录（commits, PRs, reviews）
+
+#### 配置环境变量
+
+将凭证填入 `.env.local`：
 
 ```env
 AUTH_SECRET=your-random-secret-here-at-least-32-characters
 NEXTAUTH_URL=http://localhost:3000
+
 GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-google-client-secret
+
+GITHUB_CLIENT_ID=your-github-client-id
+GITHUB_CLIENT_SECRET=your-github-client-secret
 ```
 
 生成 `AUTH_SECRET`：
@@ -91,12 +117,14 @@ npm start
   - 关注主题：睡眠 / 喂养 / 玩耍 / 健康 / 情绪
 - **显示数量**：1-3 条
 
-### 3. GitHub 活跃度 (github-activity) - 📍 M0 mock 数据
+### 3. GitHub 活跃度 (github-activity) - ✅ M2 真实接入
 
 - **功能**：显示最近 7 天的代码活动统计
-- **数据源**：GitHub API（当前为 mock 数据）
+- **数据源**：GitHub REST API
 - **统计内容**：提交次数、PR 数量、代码审查次数
 - **显示数量**：最多 3 条最近活动
+- **权限范围**：`read:user`、`user:email`（仅读取公开活动）
+- **连接方式**：在设置页面通过 GitHub OAuth 连接
 
 ## 如何添加新模块
 
@@ -313,9 +341,9 @@ export type UserSettings = {
 ## 里程碑
 
 - **M0**：✅ 脚手架 + 三模块 mock 数据 + 基础 UI
-- **M1（当前）**：✅ mail-todos 接入真实 Gmail API
-- **M2**：接入 GitHub API + 完善错误处理
-- **M3**：打磨体验，合并主分支
+- **M1**：✅ mail-todos 接入真实 Gmail API
+- **M2（当前）**：✅ github-activity 接入真实 GitHub API
+- **M3**：完善错误处理 + 打磨体验
 
 ## 文档
 
