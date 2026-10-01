@@ -1,7 +1,7 @@
 'use client';
 
 import type { ModuleLoadResult } from '@/lib/module-types';
-import type { ParentingTipsData } from './server';
+import type { ParentingTipsData } from './types';
 
 type Props = {
   result: ModuleLoadResult<ParentingTipsData>;

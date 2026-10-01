@@ -1,7 +1,7 @@
 'use client';
 
 import type { ModuleLoadResult } from '@/lib/module-types';
-import type { GithubActivityData } from './server';
+import type { GithubActivityData } from './types';
 
 type Props = {
   result: ModuleLoadResult<GithubActivityData>;

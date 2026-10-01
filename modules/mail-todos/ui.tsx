@@ -1,7 +1,7 @@
 'use client';
 
 import type { ModuleLoadResult } from '@/lib/module-types';
-import type { MailTodosData } from './server';
+import type { MailTodosData } from './types';
 
 type Props = {
   result: ModuleLoadResult<MailTodosData>;
@@ -29,6 +29,12 @@ export function Card({ result, onRefresh }: Props) {
         <div className="text-gray-500 text-center py-8">
           <p>未连接 Gmail</p>
           <p className="text-sm mt-2">请在设置中连接您的 Gmail 账户</p>
+          <a
+            href="/settings"
+            className="inline-block mt-4 px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+          >
+            去连接
+          </a>
         </div>
       </div>
     );
@@ -126,7 +132,7 @@ export function Card({ result, onRefresh }: Props) {
       {data.totalCount > data.items.length && (
         <div className="mt-4 text-center">
           <a
-            href="https://mail.google.com/mail/u/0/#inbox"
+            href="https://mail.google.com/mail/u/0/#search/is%3Aunread"
             target="_blank"
             rel="noopener noreferrer"
             className="text-sm text-blue-600 hover:text-blue-800"

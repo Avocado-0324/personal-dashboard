@@ -1,15 +1,5 @@
 import type { ModuleContext, ModuleLoadResult } from '@/lib/module-types';
-
-export type ParentingTipsData = {
-  period: 'today';
-  items: Array<{
-    id: string;
-    title: string;
-    summary: string;
-    theme: 'sleep' | 'feeding' | 'play' | 'health' | 'emotion' | 'general';
-  }>;
-  personalized: boolean;
-};
+import type { ParentingTipsData } from './types';
 
 // 静态内容池（M0）
 const tipsPool = [

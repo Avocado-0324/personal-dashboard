@@ -1,18 +1,5 @@
 import type { ModuleContext, ModuleLoadResult } from '@/lib/module-types';
-
-export type GithubActivityData = {
-  windowDays: 7;
-  summary: { commits: number; pullRequests: number; reviews: number };
-  items: Array<{
-    id: string;
-    repo: string;
-    type: 'commit' | 'pr' | 'review' | 'issue' | 'other';
-    title: string;
-    at: string;
-    url: string;
-  }>;
-  login: string;
-};
+import type { GithubActivityData } from './types';
 
 export async function load(ctx: ModuleContext): Promise<ModuleLoadResult<GithubActivityData>> {
   // 检查 GitHub 连接状态

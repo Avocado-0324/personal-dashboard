@@ -4,18 +4,57 @@
 
 ## 项目状态
 
-**当前版本**：M0 脚手架  
+**当前版本**：M1 - Gmail 真实接入  
 **架构版本**：v0.2 (冻结)
 
 ## 快速开始
 
-### 安装依赖
+### 1. 安装依赖
 
 ```bash
 npm install
 ```
 
-### 启动开发服务器
+### 2. 配置环境变量
+
+复制 `.env.example` 到 `.env.local`：
+
+```bash
+cp .env.example .env.local
+```
+
+#### 获取 Google OAuth 凭证
+
+1. 访问 [Google Cloud Console](https://console.cloud.google.com/)
+2. 创建新项目或选择现有项目
+3. 启用 Gmail API：
+   - 左侧菜单选择「API 和服务」→「已启用的 API 和服务」
+   - 点击「启用 API 和服务」
+   - 搜索「Gmail API」并启用
+4. 创建 OAuth 客户端 ID：
+   - 左侧菜单选择「API 和服务」→「凭据」
+   - 点击「创建凭据」→「OAuth 客户端 ID」
+   - 应用类型选择「Web 应用」
+   - 授权重定向 URI 添加：
+     - `http://localhost:3000/api/auth/callback/google` (本地开发)
+     - `https://your-domain.com/api/auth/callback/google` (生产环境)
+   - 点击「创建」，保存客户端 ID 和客户端密钥
+5. 将凭证填入 `.env.local`：
+
+```env
+AUTH_SECRET=your-random-secret-here-at-least-32-characters
+NEXTAUTH_URL=http://localhost:3000
+GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+```
+
+生成 `AUTH_SECRET`：
+
+```bash
+openssl rand -base64 32
+```
+
+### 3. 启动开发服务器
 
 ```bash
 npm run dev
@@ -23,7 +62,7 @@ npm run dev
 
 打开浏览器访问 [http://localhost:3000](http://localhost:3000)
 
-### 构建生产版本
+### 4. 构建生产版本
 
 ```bash
 npm run build
@@ -32,14 +71,16 @@ npm start
 
 ## 功能模块
 
-当前包含三个模块（M0 阶段使用 mock 数据）：
+当前包含三个模块：
 
-### 1. 邮件待办 (mail-todos)
+### 1. 邮件待办 (mail-todos) - ✅ M1 真实接入
 
 - **功能**：显示收件箱未读邮件
-- **数据源**：Gmail API（M0 为 mock 数据）
-- **筛选规则**：仅收件箱未读（V1 定死）
+- **数据源**：Gmail API (只读权限)
+- **筛选规则**：仅收件箱未读（`in:inbox is:unread`）
 - **显示数量**：最多 5 条
+- **权限范围**：`https://www.googleapis.com/auth/gmail.readonly`
+- **连接方式**：在设置页面通过 Google OAuth 2.0 连接
 
 ### 2. 育儿 Tips (parenting-tips)
 
@@ -50,10 +91,10 @@ npm start
   - 关注主题：睡眠 / 喂养 / 玩耍 / 健康 / 情绪
 - **显示数量**：1-3 条
 
-### 3. GitHub 活跃度 (github-activity)
+### 3. GitHub 活跃度 (github-activity) - 📍 M0 mock 数据
 
 - **功能**：显示最近 7 天的代码活动统计
-- **数据源**：GitHub API（M0 为 mock 数据）
+- **数据源**：GitHub API（当前为 mock 数据）
 - **统计内容**：提交次数、PR 数量、代码审查次数
 - **显示数量**：最多 3 条最近活动
 
@@ -271,9 +312,9 @@ export type UserSettings = {
 
 ## 里程碑
 
-- **M0（当前）**：脚手架 + 三模块 mock 数据 + 基础 UI
-- **M1**：接入真实 Gmail/GitHub API
-- **M2**：完善错误处理和边界情况
+- **M0**：✅ 脚手架 + 三模块 mock 数据 + 基础 UI
+- **M1（当前）**：✅ mail-todos 接入真实 Gmail API
+- **M2**：接入 GitHub API + 完善错误处理
 - **M3**：打磨体验，合并主分支
 
 ## 文档
