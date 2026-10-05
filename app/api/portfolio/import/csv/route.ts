@@ -17,8 +17,8 @@ function inferAssetClassAndUnitBasis(symbol: string, name: string, currency: str
   const symbolUpper = symbol.toUpperCase();
   
   if (
-    nameUpper.includes('ファンド') || 
-    nameUpper.includes('投信') ||
+    nameUpper.includes('\u30d5\u30a1\u30f3\u30c9') || 
+    nameUpper.includes('\u6295\u4fe1') ||
     nameUpper.includes('FUND') ||
     symbol.length > 6 ||
     /^[A-Z]{2}\d{6}$/.test(symbol)
@@ -137,6 +137,13 @@ export async function POST(request: NextRequest) {
     try {
       // 事务开始
       await db.transaction(async (tx) => {
+        // 如果存在已撤销的批次，先删除（允许重试）
+        if (existingBatches.length > 0 && existingBatches[0].status === 'reverted') {
+          await tx
+            .delete(importBatches)
+            .where(eq(importBatches.id, existingBatches[0].id));
+        }
+        
         // 获取或创建账户
         const accountRecords = await tx
           .select()

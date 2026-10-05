@@ -1,7 +1,10 @@
-import { neon, Pool } from '@neondatabase/serverless';
+import { neon, Pool, neonConfig } from '@neondatabase/serverless';
 import { drizzle as drizzleHttp } from 'drizzle-orm/neon-http';
 import { drizzle as drizzleWs } from 'drizzle-orm/neon-serverless';
+import ws from 'ws';
 import * as schema from './schema';
+
+neonConfig.webSocketConstructor = ws;
 
 let _httpDb: ReturnType<typeof drizzleHttp> | null = null;
 let _pool: Pool | null = null;

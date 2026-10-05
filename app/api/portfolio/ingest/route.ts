@@ -129,6 +129,13 @@ export async function POST(request: NextRequest) {
 
     // 在事务中执行所有操作
     await db.transaction(async (tx) => {
+      // 如果存在已撤销的批次，先删除（允许重试）
+      if (existingBatch && existingBatch.status === 'reverted') {
+        await tx
+          .delete(importBatches)
+          .where(eq(importBatches.id, existingBatch.id));
+      }
+      
       // 创建批次
       const [batch] = await tx
         .insert(importBatches)
