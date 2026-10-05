@@ -32,6 +32,14 @@ const allModulesConfig = [
       requires: ['github'],
     }
   },
+  {
+    manifest: {
+      id: 'portfolio' as const,
+      name: '持仓',
+      description: '资产持仓管理（敏感模块，默认关闭）',
+      requires: [],
+    }
+  },
 ];
 
 const ageBands = [
