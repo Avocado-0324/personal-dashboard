@@ -45,7 +45,14 @@ export default async function HomePage() {
 
   const modules = moduleResults
     .filter((r) => r.status === 'fulfilled')
-    .map((r) => (r as PromiseFulfilledResult<any>).value)
+    .map((r) => (r as PromiseFulfilledResult<any>).value);
+
+  const leftModules = modules
+    .filter(m => m.manifest.layout.column === 'left')
+    .sort((a, b) => a.manifest.layout.priority - b.manifest.layout.priority);
+  
+  const rightModules = modules
+    .filter(m => m.manifest.layout.column === 'right')
     .sort((a, b) => a.manifest.layout.priority - b.manifest.layout.priority);
 
   const now = new Date();
@@ -139,23 +146,41 @@ export default async function HomePage() {
           </div>
         ) : (
           <>
-            {/* 统一渲染：桌面用 grid 两栏 + column，手机用 flex + order */}
-            <div className="flex flex-col lg:grid lg:grid-cols-[1.35fr_1fr] gap-5">
-              {modules.map((module) => (
-                <div
-                  key={module.id}
-                  style={{
-                    gridColumn: module.manifest.layout.column === 'left' ? 1 : 2,
-                    order: module.manifest.layout.mobileOrder,
-                  }}
-                >
-                  <ModuleCard
-                    moduleId={module.id}
-                    initialResult={module.result}
-                    Card={module.Card}
-                  />
-                </div>
-              ))}
+            {/* 单份渲染：桌面两列容器各自 flex-col，手机列容器透明用 order 排序 */}
+            <div className="flex flex-col lg:grid lg:grid-cols-[1.35fr_1fr] lg:gap-5">
+              {/* 左栏容器：手机时透明（contents），桌面时 flex-col */}
+              <div className="max-lg:contents lg:flex lg:flex-col lg:gap-5">
+                {leftModules.map((module) => (
+                  <div
+                    key={module.id}
+                    style={{ order: module.manifest.layout.mobileOrder }}
+                    className="max-lg:mb-5"
+                  >
+                    <ModuleCard
+                      moduleId={module.id}
+                      initialResult={module.result}
+                      Card={module.Card}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {/* 右栏容器：手机时透明（contents），桌面时 flex-col */}
+              <div className="max-lg:contents lg:flex lg:flex-col lg:gap-5">
+                {rightModules.map((module) => (
+                  <div
+                    key={module.id}
+                    style={{ order: module.manifest.layout.mobileOrder }}
+                    className="max-lg:mb-5"
+                  >
+                    <ModuleCard
+                      moduleId={module.id}
+                      initialResult={module.result}
+                      Card={module.Card}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* 页脚 */}
