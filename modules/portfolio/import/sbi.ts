@@ -3,7 +3,7 @@ import { createHash } from 'crypto';
 import * as iconv from 'iconv-lite';
 
 /**
- * SBI「保有証券一覧」CSV 解析（仅日本持仓）
+ * SBI「保有証券一覧」CSV 解析
  * 
  * 格式：
  * - 第一行（或跳过空行后）：保有証券一覧
@@ -11,10 +11,14 @@ import * as iconv from 'iconv-lite';
  * - 股票和基金两种类型，每种类型下有多个"預り"（custody）
  * - Shift_JIS 编码
  * 
- * 导入范围：
- * - 只处理日本国内持仓（4个账户：SBI 特定、SBI NISA成長、SBI NISAつみたて、SBI 旧つみたて）
- * - 美国股票账户（SBI 米国株 特定、SBI 米国株 NISA成長）通过截图导入，不在此 CSV 中
- * - 一次导入只覆盖文件中出现的账户，不触及其他账户
+ * 导入语义：
+ * - 只写入/覆盖本文件里出现的账户（由解析结果的 accountName 集合决定）
+ * - 文件里未出现的账户（如美股账户）不受影响
+ * - 支持的 custody → 账户映射：
+ *   - 特定預り → SBI 特定
+ *   - NISA預り（成長投資枠） → SBI NISA成長
+ *   - NISA預り（つみたて投資枠） → SBI NISAつみたて
+ *   - 旧つみたてNISA預り → SBI 旧つみたて
  */
 
 export type CSVError = {

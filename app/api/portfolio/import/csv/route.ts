@@ -13,9 +13,8 @@ const MAX_FILE_SIZE = 1024 * 1024; // 1MB
  * SBI CSV 导入 API
  * 
  * 导入语义：
- * - 一次 CSV 导入只 upsert/覆盖文件中出现的账户（日本持仓的 4 个账户）
- * - 不触及美股账户（SBI 米国株 特定、SBI 米国株 NISA成長）
- * - 美股通过截图导入，由后续 PR 实现
+ * - 只写入/覆盖本次解析出的账户（由 parsedPositions 的 accountName 集合决定）
+ * - 文件中未出现的账户不受影响，保持原有持仓不变
  */
 
 export async function POST(request: NextRequest) {

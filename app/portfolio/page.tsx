@@ -1026,6 +1026,10 @@ export default function PortfolioPage() {
                         </div>
                       ))}
                       
+                      <p className="text-xs text-muted pt-2 border-t border-card-border">
+                        将更新以上 {csvPreview.accountSummaries.length} 个账户的持仓，其他账户（如美股）不变
+                      </p>
+                      
                       {csvErrors.length === 0 && csvPreview.totalRows > 0 ? (
                         <button
                           onClick={handleCSVImport}
