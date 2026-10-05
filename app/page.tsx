@@ -45,19 +45,8 @@ export default async function HomePage() {
 
   const modules = moduleResults
     .filter((r) => r.status === 'fulfilled')
-    .map((r) => (r as PromiseFulfilledResult<any>).value);
-
-  const leftModules = modules
-    .filter(m => m.manifest.layout.column === 'left')
+    .map((r) => (r as PromiseFulfilledResult<any>).value)
     .sort((a, b) => a.manifest.layout.priority - b.manifest.layout.priority);
-  
-  const rightModules = modules
-    .filter(m => m.manifest.layout.column === 'right')
-    .sort((a, b) => a.manifest.layout.priority - b.manifest.layout.priority);
-
-  const mobileModules = modules
-    .slice()
-    .sort((a, b) => a.manifest.layout.mobileOrder - b.manifest.layout.mobileOrder);
 
   const now = new Date();
   const hour = now.getHours();
@@ -66,7 +55,7 @@ export default async function HomePage() {
     month: 'long', 
     day: 'numeric', 
     weekday: 'long' 
-  }).replace(/(\d+)月/, '$1月 ');
+  }).replace(/(\d+)月(\d+)日/, '$1月$2日 ');
 
   const mailModule = modules.find(m => m.id === 'mail-todos');
   const githubModule = modules.find(m => m.id === 'github-activity');
@@ -150,42 +139,22 @@ export default async function HomePage() {
           </div>
         ) : (
           <>
-            {/* 两栏布局（桌面） / 单栏（移动） */}
-            <div className="hidden lg:grid lg:grid-cols-[1.35fr_1fr] gap-5">
-              {/* 左栏 */}
-              <div className="flex flex-col gap-5">
-                {leftModules.map((module) => (
-                  <ModuleCard
-                    key={module.id}
-                    moduleId={module.id}
-                    initialResult={module.result}
-                    Card={module.Card}
-                  />
-                ))}
-              </div>
-
-              {/* 右栏 */}
-              <div className="flex flex-col gap-5">
-                {rightModules.map((module) => (
-                  <ModuleCard
-                    key={module.id}
-                    moduleId={module.id}
-                    initialResult={module.result}
-                    Card={module.Card}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* 手机端单栏：按 mobileOrder 排序 */}
-            <div className="lg:hidden flex flex-col gap-5">
-              {mobileModules.map((module) => (
-                <ModuleCard
+            {/* 统一渲染：桌面用 grid 两栏 + column，手机用 flex + order */}
+            <div className="flex flex-col lg:grid lg:grid-cols-[1.35fr_1fr] gap-5">
+              {modules.map((module) => (
+                <div
                   key={module.id}
-                  moduleId={module.id}
-                  initialResult={module.result}
-                  Card={module.Card}
-                />
+                  style={{
+                    gridColumn: module.manifest.layout.column === 'left' ? 1 : 2,
+                    order: module.manifest.layout.mobileOrder,
+                  }}
+                >
+                  <ModuleCard
+                    moduleId={module.id}
+                    initialResult={module.result}
+                    Card={module.Card}
+                  />
+                </div>
               ))}
             </div>
 
