@@ -144,14 +144,16 @@ export async function fetchGithubActivity(): Promise<{
         const commitCount = event.payload?.commits?.length || 0;
         summary.commits += commitCount;
         
-        const message = event.payload?.commits?.[0]?.message || 'Pushed commits';
+        const message = commitCount > 1 
+          ? `推送了 ${commitCount} 个提交到 ${event.payload?.ref?.replace('refs/heads/', '') || 'main'}`
+          : event.payload?.commits?.[0]?.message?.split('\n')[0] || '推送了提交';
         priorityActivities.push({
           id: event.id,
           repo,
           type: 'commit',
-          title: message.split('\n')[0],
+          title: message,
           at,
-          url: `https://github.com/${repo}`,
+          url: `https://github.com/${repo}/commits/${event.payload?.head || ''}`,
         });
         break;
       }
@@ -159,11 +161,19 @@ export async function fetchGithubActivity(): Promise<{
         summary.pullRequests++;
         
         const pr = event.payload?.pull_request;
+        const action = event.payload?.action;
+        let actionText = '';
+        if (action === 'opened') actionText = '打开了 PR';
+        else if (action === 'closed' && pr?.merged) actionText = '合并了 PR';
+        else if (action === 'closed') actionText = '关闭了 PR';
+        else actionText = 'PR';
+        
+        const title = actionText + (pr?.title ? `：${pr.title}` : '');
         priorityActivities.push({
           id: event.id,
           repo,
           type: 'pr',
-          title: pr?.title || 'Pull request',
+          title,
           at,
           url: pr?.html_url || `https://github.com/${repo}`,
         });
@@ -174,11 +184,12 @@ export async function fetchGithubActivity(): Promise<{
         summary.reviews++;
         
         const pr = event.payload?.pull_request;
+        const title = pr?.title ? `审查了 PR：${pr.title}` : '审查了 PR';
         priorityActivities.push({
           id: event.id,
           repo,
           type: 'review',
-          title: pr?.title || 'Reviewed PR',
+          title,
           at,
           url: pr?.html_url || `https://github.com/${repo}`,
         });
@@ -186,22 +197,42 @@ export async function fetchGithubActivity(): Promise<{
       }
       case 'IssuesEvent': {
         const issue = event.payload?.issue;
+        const action = event.payload?.action;
+        let actionText = '';
+        if (action === 'opened') actionText = '创建了 Issue';
+        else if (action === 'closed') actionText = '关闭了 Issue';
+        else actionText = 'Issue';
+        
+        const title = actionText + (issue?.title ? `：${issue.title}` : '');
         priorityActivities.push({
           id: event.id,
           repo,
           type: 'issue',
-          title: issue?.title || 'Issue activity',
+          title,
           at,
           url: issue?.html_url || `https://github.com/${repo}`,
         });
         break;
       }
       default: {
+        let activityType = event.type.replace('Event', '');
+        const typeMap: Record<string, string> = {
+          'Create': '创建了分支或标签',
+          'Delete': '删除了分支或标签',
+          'Fork': 'Fork 了仓库',
+          'Watch': '关注了仓库',
+          'Star': '标星了仓库',
+          'Release': '发布了版本',
+          'IssueComment': '评论了 Issue',
+          'CommitComment': '评论了提交',
+        };
+        const activityText = typeMap[activityType] || `${activityType} 活动`;
+        
         otherActivities.push({
           id: event.id,
           repo,
           type: 'other',
-          title: `${event.type.replace('Event', '')} activity`,
+          title: activityText,
           at,
           url: `https://github.com/${repo}`,
         });

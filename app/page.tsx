@@ -55,10 +55,6 @@ export default async function HomePage() {
     .filter(m => m.manifest.layout.column === 'right')
     .sort((a, b) => a.manifest.layout.priority - b.manifest.layout.priority);
 
-  const mobileModules = modules
-    .slice()
-    .sort((a, b) => a.manifest.layout.mobileOrder - b.manifest.layout.mobileOrder);
-
   const now = new Date();
   const hour = now.getHours();
   const greeting = hour < 12 ? '上午好' : hour < 18 ? '下午好' : '晚上好';
@@ -66,7 +62,7 @@ export default async function HomePage() {
     month: 'long', 
     day: 'numeric', 
     weekday: 'long' 
-  }).replace(/(\d+)月/, '$1月 ');
+  }).replace(/(\d+)月(\d+)日/, '$1月$2日 ');
 
   const mailModule = modules.find(m => m.id === 'mail-todos');
   const githubModule = modules.find(m => m.id === 'github-activity');
@@ -150,43 +146,41 @@ export default async function HomePage() {
           </div>
         ) : (
           <>
-            {/* 两栏布局（桌面） / 单栏（移动） */}
-            <div className="hidden lg:grid lg:grid-cols-[1.35fr_1fr] gap-5">
-              {/* 左栏 */}
-              <div className="flex flex-col gap-5">
+            {/* 单份渲染：桌面两列容器各自 flex-col，手机列容器透明用 order 排序 */}
+            <div className="flex flex-col lg:grid lg:grid-cols-[1.35fr_1fr] lg:gap-5">
+              {/* 左栏容器：手机时透明（contents），桌面时 flex-col */}
+              <div className="max-lg:contents lg:flex lg:flex-col lg:gap-5">
                 {leftModules.map((module) => (
-                  <ModuleCard
+                  <div
                     key={module.id}
-                    moduleId={module.id}
-                    initialResult={module.result}
-                    Card={module.Card}
-                  />
+                    style={{ order: module.manifest.layout.mobileOrder }}
+                    className="max-lg:mb-5"
+                  >
+                    <ModuleCard
+                      moduleId={module.id}
+                      initialResult={module.result}
+                      Card={module.Card}
+                    />
+                  </div>
                 ))}
               </div>
 
-              {/* 右栏 */}
-              <div className="flex flex-col gap-5">
+              {/* 右栏容器：手机时透明（contents），桌面时 flex-col */}
+              <div className="max-lg:contents lg:flex lg:flex-col lg:gap-5">
                 {rightModules.map((module) => (
-                  <ModuleCard
+                  <div
                     key={module.id}
-                    moduleId={module.id}
-                    initialResult={module.result}
-                    Card={module.Card}
-                  />
+                    style={{ order: module.manifest.layout.mobileOrder }}
+                    className="max-lg:mb-5"
+                  >
+                    <ModuleCard
+                      moduleId={module.id}
+                      initialResult={module.result}
+                      Card={module.Card}
+                    />
+                  </div>
                 ))}
               </div>
-            </div>
-
-            {/* 手机端单栏：按 mobileOrder 排序 */}
-            <div className="lg:hidden flex flex-col gap-5">
-              {mobileModules.map((module) => (
-                <ModuleCard
-                  key={module.id}
-                  moduleId={module.id}
-                  initialResult={module.result}
-                  Card={module.Card}
-                />
-              ))}
             </div>
 
             {/* 页脚 */}
