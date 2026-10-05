@@ -35,6 +35,7 @@ export type PortfolioSummary = {
   pnlJpy: string;
   xirr: string | null;
   asOf: string;
+  missingFxCount: number;
 };
 
 export type AccountType = 'tokutei' | 'nisa_growth' | 'nisa_tsumitate' | 'cash' | 'other';

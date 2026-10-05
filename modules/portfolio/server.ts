@@ -243,5 +243,6 @@ export async function loadSummary(): Promise<PortfolioSummary | null> {
     pnlJpy: data.pnlJpy,
     xirr: data.xirr,
     asOf: data.asOf,
+    missingFxCount: data.missingFxCount,
   };
 }
