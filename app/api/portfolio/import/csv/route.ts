@@ -129,6 +129,7 @@ export async function POST(request: NextRequest) {
       const batch = existingBatches[0];
       const importTime = new Date(batch.createdAt!);
       const timeStr = importTime.toLocaleString('zh-CN', {
+        timeZone: 'Asia/Tokyo',
         month: 'long',
         day: 'numeric',
         hour: '2-digit',
@@ -267,6 +268,7 @@ export async function POST(request: NextRequest) {
           const batch = existingBatches[0];
           const importTime = new Date(batch.createdAt!);
           const timeStr = importTime.toLocaleString('zh-CN', {
+            timeZone: 'Asia/Tokyo',
             month: 'long',
             day: 'numeric',
             hour: '2-digit',

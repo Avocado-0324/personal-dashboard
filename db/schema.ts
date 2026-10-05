@@ -6,7 +6,7 @@ export const accounts = pgTable('accounts', {
   name: text('name').notNull(),
   type: text('type').notNull().$type<'tokutei' | 'nisa_growth' | 'nisa_tsumitate' | 'cash' | 'other'>(),
   broker: text('broker'),
-  createdAt: timestamp('created_at').defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
 
 export const instruments = pgTable('instruments', {
@@ -24,7 +24,7 @@ export const snapshots = pgTable('snapshots', {
   source: text('source').notNull().$type<'manual' | 'csv' | 'screenshot'>(),
   batchId: uuid('batch_id'),
   note: text('note'),
-  createdAt: timestamp('created_at').defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
 
 export const positions = pgTable('positions', {
@@ -65,7 +65,7 @@ export const importBatches = pgTable('import_batches', {
   filename: text('filename'),
   rowCount: integer('row_count'),
   status: text('status').notNull().default('committed').$type<'committed' | 'reverted'>(),
-  createdAt: timestamp('created_at').defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 }, (table) => ({
   idempotencyKeyUniqueNotReverted: uniqueIndex('import_batches_idempotency_key_unique_not_reverted')
     .on(table.idempotencyKey)
