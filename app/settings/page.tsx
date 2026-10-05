@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { getUserSettings, toggleModule, updateUserSettings } from '@/lib/user-settings';
 import { useRouter } from 'next/navigation';
-import { signIn, signOut } from 'next-auth/react';
+import { signOut } from 'next-auth/react';
 
 const allModulesConfig = [
   {
@@ -122,12 +122,23 @@ export default function SettingsPage() {
       <header className="bg-white shadow-sm">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
           <h1 className="text-2xl font-bold text-gray-900">设置</h1>
-          <Link
-            href="/"
-            className="text-sm text-blue-600 hover:text-blue-800 px-4 py-2 rounded hover:bg-blue-50"
-          >
-            返回首页
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href="/"
+              className="text-sm text-blue-600 hover:text-blue-800 px-4 py-2 rounded hover:bg-blue-50"
+            >
+              返回首页
+            </Link>
+            <button
+              onClick={async () => {
+                await fetch('/api/github/disconnect', { method: 'POST' });
+                await signOut({ callbackUrl: '/auth/signin' });
+              }}
+              className="text-sm text-red-600 hover:text-red-800 px-4 py-2 rounded hover:bg-red-50"
+            >
+              登出
+            </button>
+          </div>
         </div>
       </header>
 
@@ -306,7 +317,7 @@ export default function SettingsPage() {
                   <button
                     onClick={async () => {
                       await fetch('/api/gmail/connect', { method: 'POST' });
-                      signIn('google', { callbackUrl: '/settings' });
+                      router.push('/settings');
                     }}
                     className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
                   >
@@ -345,8 +356,7 @@ export default function SettingsPage() {
                 ) : (
                   <button
                     onClick={async () => {
-                      await fetch('/api/github/connect', { method: 'POST' });
-                      signIn('github', { callbackUrl: '/settings' });
+                      window.location.href = '/api/connect/github';
                     }}
                     className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
                   >

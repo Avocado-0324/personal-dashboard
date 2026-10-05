@@ -98,9 +98,22 @@ export async function fetchUnreadEmails(): Promise<{
     });
 
     const headers = detail.data.payload?.headers || [];
-    const from = headers.find((h) => h.name === 'From')?.value || 'Unknown';
-    const subject = headers.find((h) => h.name === 'Subject')?.value || '(No Subject)';
+    const fromHeader = headers.find((h) => h.name === 'From')?.value || '';
+    const subject = headers.find((h) => h.name === 'Subject')?.value || '（无主题）';
     const date = headers.find((h) => h.name === 'Date')?.value;
+
+    let from = fromHeader;
+    if (fromHeader) {
+      const match = fromHeader.match(/^(.*?)\s*<(.+?)>$/);
+      if (match) {
+        from = match[1].trim() || match[2];
+      } else if (fromHeader.includes('@')) {
+        from = fromHeader;
+      }
+    }
+    if (!from) {
+      from = fromHeader || '未知发件人';
+    }
 
     const receivedAt = date ? new Date(date).toISOString() : new Date().toISOString();
 

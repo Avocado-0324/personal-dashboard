@@ -1,5 +1,5 @@
-import { auth } from '@/lib/auth';
 import { cookies } from 'next/headers';
+import { decryptToken } from '@/lib/crypto';
 
 export type GithubConnectorStatus = {
   ready: boolean;
@@ -22,6 +22,29 @@ export type GithubActivitySummary = {
   reviews: number;
 };
 
+type GithubConnection = {
+  token: string;
+  login: string;
+  id: number;
+};
+
+async function getGithubConnection(): Promise<GithubConnection | null> {
+  try {
+    const cookieStore = await cookies();
+    const connectionCookie = cookieStore.get('pd_github_connection');
+    
+    if (!connectionCookie?.value) {
+      return null;
+    }
+
+    const data = JSON.parse(connectionCookie.value);
+    return data;
+  } catch (error) {
+    console.error('Error reading GitHub connection:', error);
+    return null;
+  }
+}
+
 export async function getGithubStatus(): Promise<GithubConnectorStatus> {
   try {
     const cookieStore = await cookies();
@@ -31,17 +54,15 @@ export async function getGithubStatus(): Promise<GithubConnectorStatus> {
       return { ready: false };
     }
 
-    const session = await auth();
-    const githubToken = (session as any)?.githubAccessToken;
-    const githubLogin = (session as any)?.githubLogin;
+    const connection = await getGithubConnection();
     
-    if (!session || !githubToken || !githubLogin) {
+    if (!connection) {
       return { ready: false };
     }
 
     return {
       ready: true,
-      displayName: githubLogin,
+      displayName: connection.login,
     };
   } catch (error) {
     return {
@@ -63,16 +84,22 @@ export async function fetchGithubActivity(): Promise<{
     throw new Error('GitHub disconnected');
   }
 
-  const session = await auth();
-  const githubToken = (session as any)?.githubAccessToken;
-  const login = (session as any)?.githubLogin;
+  const connection = await getGithubConnection();
   
-  if (!session || !githubToken || !login) {
+  if (!connection) {
     throw new Error('Not authenticated');
   }
 
+  let githubToken: string;
+  try {
+    githubToken = decryptToken(connection.token);
+  } catch (error) {
+    console.error('Failed to decrypt GitHub token:', error);
+    throw new Error('Invalid token');
+  }
+
   const eventsResponse = await fetch(
-    `https://api.github.com/users/${login}/events?per_page=100`,
+    `https://api.github.com/users/${connection.login}/events?per_page=100`,
     {
       headers: {
         Authorization: `Bearer ${githubToken}`,
@@ -186,6 +213,6 @@ export async function fetchGithubActivity(): Promise<{
   return {
     activities,
     summary,
-    login,
+    login: connection.login,
   };
 }

@@ -1,6 +1,37 @@
 import NextAuth from 'next-auth';
 import Google from 'next-auth/providers/google';
-import GitHub from 'next-auth/providers/github';
+
+const ALLOWED_EMAIL = 'niqinou@gmail.com';
+
+async function refreshGoogleAccessToken(refreshToken: string) {
+  try {
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: process.env.GOOGLE_CLIENT_ID!,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+      }),
+    });
+
+    const tokens = await response.json();
+
+    if (!response.ok) {
+      throw new Error(tokens.error || 'Failed to refresh token');
+    }
+
+    return {
+      accessToken: tokens.access_token,
+      expiresAt: Math.floor(Date.now() / 1000) + tokens.expires_in,
+      refreshToken: tokens.refresh_token ?? refreshToken,
+    };
+  } catch (error) {
+    console.error('Error refreshing access token:', error);
+    throw error;
+  }
+}
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
@@ -15,28 +46,40 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         },
       },
     }),
-    GitHub({
-      clientId: process.env.GITHUB_CLIENT_ID!,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
-      authorization: {
-        params: {
-          scope: 'read:user user:email',
-        },
-      },
-    }),
   ],
   callbacks: {
-    async jwt({ token, account, profile }) {
-      if (account) {
-        if (account.provider === 'google') {
-          token.googleAccessToken = account.access_token;
-          token.googleRefreshToken = account.refresh_token;
-          token.googleExpiresAt = account.expires_at;
-        } else if (account.provider === 'github') {
-          token.githubAccessToken = account.access_token;
-          token.githubLogin = (profile as any)?.login;
+    async signIn({ user, account, profile }) {
+      if (account?.provider === 'google') {
+        const email = user.email || profile?.email;
+        if (email !== ALLOWED_EMAIL) {
+          return false;
         }
       }
+      return true;
+    },
+    async jwt({ token, account, user }) {
+      if (account && account.provider === 'google') {
+        token.googleAccessToken = account.access_token;
+        token.googleRefreshToken = account.refresh_token;
+        token.googleExpiresAt = account.expires_at;
+        token.email = user?.email;
+      }
+
+      if (token.googleExpiresAt && token.googleRefreshToken) {
+        const shouldRefresh = (token.googleExpiresAt as number) * 1000 - Date.now() < 5 * 60 * 1000;
+        
+        if (shouldRefresh) {
+          try {
+            const refreshed = await refreshGoogleAccessToken(token.googleRefreshToken as string);
+            token.googleAccessToken = refreshed.accessToken;
+            token.googleExpiresAt = refreshed.expiresAt;
+            token.googleRefreshToken = refreshed.refreshToken;
+          } catch (error) {
+            console.error('Failed to refresh token:', error);
+          }
+        }
+      }
+
       return token;
     },
     async session({ session, token }) {
@@ -46,15 +89,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         (session as any).googleExpiresAt = token.googleExpiresAt;
       }
       
-      if (token.githubAccessToken) {
-        (session as any).githubAccessToken = token.githubAccessToken;
-        (session as any).githubLogin = token.githubLogin;
-      }
-      
       return session;
     },
   },
   pages: {
     signIn: '/auth/signin',
+    error: '/auth/signin',
   },
 });
