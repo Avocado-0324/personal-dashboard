@@ -72,7 +72,7 @@ describe('SBI Holdings CSV Parser', () => {
   it('应该处理 Shift_JIS 编码', () => {
     // 将 UTF-8 转为 Shift_JIS
     const sjisBuffer = iconv.encode(fixtureUtf8, 'shift_jis');
-    const decoded = decodeShiftJIS(sjisBuffer.buffer);
+    const decoded = decodeShiftJIS(sjisBuffer);
     
     // 解码后应该能正常解析
     const result = parseSBIHoldings(decoded);

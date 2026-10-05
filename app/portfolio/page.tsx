@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Decimal from 'decimal.js';
-import { calculateXIRR } from '@/modules/portfolio/calculations';
+import { calculateXIRR, marketValueJpyFloor, cashValueJpyFloor } from '@/modules/portfolio/calculations';
 import { getUserSettings } from '@/lib/user-settings';
 import { getAllModules } from '@/lib/module-registry';
 
@@ -42,6 +42,26 @@ type Batch = {
   status: string;
   createdAt: string;
 };
+
+// 格式化数量：整数不带小数，小数最多4位并去除末尾0，加千分位
+function formatQuantity(qty: string): string {
+  const num = new Decimal(qty);
+  const isInteger = num.modulo(1).isZero();
+  
+  if (isInteger) {
+    // 整数：无小数点，加千分位
+    return num.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  } else {
+    // 小数：最多4位，去除末尾0
+    let formatted = num.toFixed(4);
+    // 去除末尾多余的0
+    formatted = formatted.replace(/0+$/, '').replace(/\.$/, '');
+    // 添加千分位（整数部分）
+    const parts = formatted.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return parts.join('.');
+  }
+}
 
 export default function PortfolioPage() {
   const [activeTab, setActiveTab] = useState<'positions' | 'cashflows' | 'snapshots' | 'imports'>('positions');
@@ -399,18 +419,20 @@ export default function PortfolioPage() {
         continue;
       }
       
-      const qty = new Decimal(position.quantity);
-      const price = new Decimal(position.price);
-      const fxRate = new Decimal(fxRateRaw);
-      const unitBasis = new Decimal(instrument.unitBasis);
+      // 使用逐行 floor 计算市值
+      const value = marketValueJpyFloor({
+        quantity: position.quantity,
+        price: position.price,
+        unitBasis: instrument.unitBasis,
+        fxRateToJpy: fxRateRaw,
+      });
       
-      totalValue = totalValue.plus(qty.times(price).div(unitBasis).times(fxRate));
+      totalValue = totalValue.plus(value);
     }
   }
 
   if (data?.cashBalances) {
     for (const { cash } of data.cashBalances) {
-      const amount = new Decimal(cash.amount);
       const fxRateRaw = cash.fxRateToJpy;
       
       if (!fxRateRaw || fxRateRaw === null) {
@@ -418,8 +440,12 @@ export default function PortfolioPage() {
         continue;
       }
       
-      const fxRate = new Decimal(fxRateRaw);
-      const value = amount.times(fxRate);
+      // 使用逐行 floor 计算现金
+      const value = cashValueJpyFloor({
+        amount: cash.amount,
+        fxRateToJpy: fxRateRaw,
+      });
+      
       totalCash = totalCash.plus(value);
       totalValue = totalValue.plus(value);
     }
@@ -629,10 +655,12 @@ export default function PortfolioPage() {
                             let marketValue = '缺汇率';
                             
                             if (fxRateRaw && fxRateRaw !== null) {
-                              const value = new Decimal(pos.position.quantity)
-                                .times(new Decimal(pos.position.price))
-                                .div(new Decimal(pos.instrument.unitBasis))
-                                .times(new Decimal(fxRateRaw));
+                              const value = marketValueJpyFloor({
+                                quantity: pos.position.quantity,
+                                price: pos.position.price,
+                                unitBasis: pos.instrument.unitBasis,
+                                fxRateToJpy: fxRateRaw,
+                              });
                               marketValue = '¥' + value.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
                             }
                             
@@ -643,10 +671,10 @@ export default function PortfolioPage() {
                                 <td className="py-3 text-foreground">{pos.instrument.name}</td>
                                 <td className="py-3 text-muted">{pos.instrument.symbol}</td>
                                 <td className="py-3 text-right font-mono text-foreground">
-                                  {parseFloat(pos.position.quantity).toFixed(2)}
+                                  {formatQuantity(pos.position.quantity)}
                                 </td>
                                 <td className="py-3 text-right font-mono text-foreground">
-                                  {parseFloat(pos.position.price).toFixed(2)}
+                                  {formatQuantity(pos.position.price)}
                                 </td>
                                 <td className="py-3 text-right">
                                   {fxRateRaw ? (

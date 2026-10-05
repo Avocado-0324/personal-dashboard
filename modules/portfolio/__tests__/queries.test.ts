@@ -204,22 +204,22 @@ describe('Portfolio Queries - Overlapping Snapshots', () => {
     // A, B, C 应该来自 S2（200 股 @ ¥150）
     const posA = testPositions.find(p => p.position.accountId === accountA);
     expect(posA?.position.snapshotId).toBe(snapshotS2);
-    expect(posA?.position.quantity).toBe('200');
-    expect(posA?.position.price).toBe('150');
+    expect(new Decimal(posA?.position.quantity || '0').equals(200)).toBe(true);
+    expect(new Decimal(posA?.position.price || '0').equals(150)).toBe(true);
 
     const posB = testPositions.find(p => p.position.accountId === accountB);
     expect(posB?.position.snapshotId).toBe(snapshotS2);
-    expect(posB?.position.quantity).toBe('200');
+    expect(new Decimal(posB?.position.quantity || '0').equals(200)).toBe(true);
 
     const posC = testPositions.find(p => p.position.accountId === accountC);
     expect(posC?.position.snapshotId).toBe(snapshotS2);
-    expect(posC?.position.quantity).toBe('200');
+    expect(new Decimal(posC?.position.quantity || '0').equals(200)).toBe(true);
 
     // D 应该来自 S1（100 股 @ ¥100）
     const posD = testPositions.find(p => p.position.accountId === accountD);
     expect(posD?.position.snapshotId).toBe(snapshotS1);
-    expect(posD?.position.quantity).toBe('100');
-    expect(posD?.position.price).toBe('100');
+    expect(new Decimal(posD?.position.quantity || '0').equals(100)).toBe(true);
+    expect(new Decimal(posD?.position.price || '0').equals(100)).toBe(true);
 
     // 计算总市值
     const totalValue = testPositions.reduce((sum, p) => {

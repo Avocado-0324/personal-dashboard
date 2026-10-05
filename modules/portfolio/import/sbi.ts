@@ -63,8 +63,9 @@ const CUSTODY_TO_ACCOUNT: Record<string, { name: string; type: 'tokutei' | 'nisa
 /**
  * Shift_JIS 二进制解码（Node.js 环境）
  */
-export function decodeShiftJIS(buffer: ArrayBuffer): string {
-  return iconv.decode(Buffer.from(buffer), 'shift_jis');
+export function decodeShiftJIS(buffer: ArrayBuffer | Buffer): string {
+  const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+  return iconv.decode(buf, 'shift_jis');
 }
 
 /**

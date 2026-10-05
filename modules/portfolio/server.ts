@@ -2,7 +2,7 @@ import { isDatabaseConfigured, getDb } from '@/db/client';
 import { cashFlows } from '@/db/schema';
 import Decimal from 'decimal.js';
 import type { PortfolioData, PortfolioSummary } from './types';
-import { calculateXIRR, isStale, type CashFlow } from './calculations';
+import { calculateXIRR, isStale, marketValueJpyFloor, cashValueJpyFloor, type CashFlow } from './calculations';
 import { ACCOUNT_TYPE_LABELS, ASSET_CLASS_LABELS } from './types';
 import { 
   getLatestSnapshotsByAccount, 
@@ -56,11 +56,7 @@ export async function loadPortfolioData(): Promise<PortfolioData | null> {
   let missingFxCount = 0;
 
   for (const { position, account, instrument } of allPositions) {
-    const quantity = new Decimal(position.quantity);
-    const price = new Decimal(position.price);
-    const avgCost = new Decimal(position.avgCost);
     const fxRateRaw = position.fxRateToJpy;
-    const unitBasis = new Decimal(instrument.unitBasis);
 
     // 缺汇率则跳过汇总
     if (!fxRateRaw || fxRateRaw === null) {
@@ -68,11 +64,22 @@ export async function loadPortfolioData(): Promise<PortfolioData | null> {
       continue;
     }
 
-    const fxRate = new Decimal(fxRateRaw);
-
-    // 计算市值：quantity * price / unitBasis * fxRate
-    const value = quantity.times(price).div(unitBasis).times(fxRate);
-    const unrealizedPnl = quantity.times(price.minus(avgCost)).div(unitBasis).times(fxRate);
+    // 计算市值（逐行 floor）
+    const value = marketValueJpyFloor({
+      quantity: position.quantity,
+      price: position.price,
+      unitBasis: instrument.unitBasis,
+      fxRateToJpy: fxRateRaw,
+    });
+    
+    // 未实现盈亏（也需要 floor）
+    const avgCost = new Decimal(position.avgCost);
+    const unrealizedPnl = marketValueJpyFloor({
+      quantity: position.quantity,
+      price: new Decimal(position.price).minus(avgCost).toString(),
+      unitBasis: instrument.unitBasis,
+      fxRateToJpy: fxRateRaw,
+    });
 
     totalValue = totalValue.plus(value);
 
@@ -96,7 +103,6 @@ export async function loadPortfolioData(): Promise<PortfolioData | null> {
   // 加上现金
   let totalCash = new Decimal(0);
   for (const { cash, account } of allCashBalances) {
-    const amount = new Decimal(cash.amount);
     const fxRateRaw = cash.fxRateToJpy;
 
     // 缺汇率则跳过
@@ -105,8 +111,11 @@ export async function loadPortfolioData(): Promise<PortfolioData | null> {
       continue;
     }
 
-    const fxRate = new Decimal(fxRateRaw);
-    const value = amount.times(fxRate);
+    // 计算现金日元金额（逐行 floor）
+    const value = cashValueJpyFloor({
+      amount: cash.amount,
+      fxRateToJpy: fxRateRaw,
+    });
 
     totalValue = totalValue.plus(value);
     totalCash = totalCash.plus(value);
