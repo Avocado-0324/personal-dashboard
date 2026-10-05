@@ -932,7 +932,8 @@ export default function PortfolioPage() {
                 
                 <div className="space-y-3">
                   {/* 自定义拖放区域 */}
-                  <div
+                  <label
+                    htmlFor="csv-file-input"
                     onDragOver={(e) => {
                       e.preventDefault();
                       setIsDragging(true);
@@ -948,12 +949,8 @@ export default function PortfolioPage() {
                         setCsvErrors([]);
                       }
                     }}
-                    onClick={() => {
-                      const input = document.getElementById('csv-file-input') as HTMLInputElement;
-                      input?.click();
-                    }}
                     className={`
-                      border-2 border-dashed rounded-lg p-6 text-center cursor-pointer
+                      block border-2 border-dashed rounded-lg p-6 text-center cursor-pointer
                       transition-colors
                       ${isDragging 
                         ? 'border-accent bg-accent/5' 
@@ -973,7 +970,7 @@ export default function PortfolioPage() {
                           setCsvErrors([]);
                         }
                       }}
-                      className="hidden"
+                      className="sr-only"
                     />
                     <div className="space-y-2">
                       <p className="text-sm text-foreground">
@@ -988,7 +985,7 @@ export default function PortfolioPage() {
                         </p>
                       )}
                     </div>
-                  </div>
+                  </label>
                   
                   <div>
                     <label className="block text-xs text-muted mb-1">快照日期</label>
@@ -1019,8 +1016,10 @@ export default function PortfolioPage() {
                           <div className="flex items-center gap-2">
                             <span className="text-muted">{summary.count} 条</span>
                             <span className="text-muted">¥{parseFloat(summary.totalValueJpy).toLocaleString()}</span>
-                            {summary.matchesFile && (
+                            {summary.matchesFile ? (
                               <span className="text-up">✓</span>
+                            ) : (
+                              <span className="text-down" title="与文件小计不符">✗</span>
                             )}
                           </div>
                         </div>

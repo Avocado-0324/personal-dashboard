@@ -144,11 +144,14 @@ export async function POST(request: NextRequest) {
 
           let accountId: string;
           if (existingAccounts.length === 0) {
+            // 从 parsedPositions 中找到该账户的类型
+            const accountType = parsedPositions.find(p => p.accountName === accountName)?.accountType || 'tokutei';
+            
             const [newAccount] = await tx
               .insert(accounts)
               .values({
                 name: accountName,
-                type: 'tokutei', // 默认类型
+                type: accountType,
                 broker: 'SBI',
               })
               .returning();

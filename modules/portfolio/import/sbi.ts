@@ -34,6 +34,7 @@ export type ParsedPosition = {
   avgCost: string;
   price: string;
   accountName: string;
+  accountType: 'tokutei' | 'nisa_growth' | 'nisa_tsumitate';
   assetClass: 'jp_stock' | 'fund';
   unitBasis: string;
 };
@@ -50,13 +51,13 @@ export type ParseResult = {
 };
 
 /**
- * Custody → 账户名映射（只有这 4 种）
+ * Custody → 账户映射（名称 + 类型）
  */
-const CUSTODY_TO_ACCOUNT: Record<string, string> = {
-  '特定預り': 'SBI 特定',
-  'NISA預り（成長投資枠）': 'SBI NISA成長',
-  'NISA預り（つみたて投資枠）': 'SBI NISAつみたて',
-  '旧つみたてNISA預り': 'SBI 旧つみたて',
+const CUSTODY_TO_ACCOUNT: Record<string, { name: string; type: 'tokutei' | 'nisa_growth' | 'nisa_tsumitate' }> = {
+  '特定預り': { name: 'SBI 特定', type: 'tokutei' },
+  'NISA預り（成長投資枠）': { name: 'SBI NISA成長', type: 'nisa_growth' },
+  'NISA預り（つみたて投資枠）': { name: 'SBI NISAつみたて', type: 'nisa_tsumitate' },
+  '旧つみたてNISA預り': { name: 'SBI 旧つみたて', type: 'nisa_tsumitate' },
 };
 
 /**
@@ -217,7 +218,9 @@ export function parseSBIHoldings(csvText: string): ParseResult {
         continue;
       }
       
-      const accountName = CUSTODY_TO_ACCOUNT[custody];
+      const accountMapping = CUSTODY_TO_ACCOUNT[custody];
+      const accountName = accountMapping.name;
+      const accountType = accountMapping.type;
       
       // 读取汇总数据（跳过空行 + 评价额合计行 + 数据行）
       i++; // 跳过合计标题行
@@ -301,6 +304,7 @@ export function parseSBIHoldings(csvText: string): ParseResult {
               avgCost: avgCost.toString(),
               price: price.toString(),
               accountName,
+              accountType,
               assetClass: 'jp_stock',
               unitBasis: '1',
             });
@@ -335,6 +339,7 @@ export function parseSBIHoldings(csvText: string): ParseResult {
               avgCost: avgCost.toString(),
               price: price.toString(),
               accountName,
+              accountType,
               assetClass: 'fund',
               unitBasis: '10000',
             });

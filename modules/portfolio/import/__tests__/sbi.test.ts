@@ -14,7 +14,7 @@ describe('SBI Holdings CSV Parser', () => {
     const result = parseSBIHoldings(fixtureUtf8);
     
     expect(result.errors).toEqual([]);
-    expect(result.positions.length).toBe(5);
+    expect(result.positions.length).toBe(5); // 包含空段（旧つみたてNISA 0 条）
     
     // 检查股票
     const toyota = result.positions.find(p => p.symbol === '7203');
@@ -29,9 +29,10 @@ describe('SBI Holdings CSV Parser', () => {
     // 检查基金
     const emaxis = result.positions.find(p => p.name.includes('ｅＭＡＸＩＳ'));
     expect(emaxis).toBeDefined();
-    expect(emaxis?.quantity).toBe('73367');
+    expect(emaxis?.quantity).toBe('55123');
     expect(emaxis?.price).toBe('16857');
     expect(emaxis?.accountName).toBe('SBI 特定');
+    expect(emaxis?.accountType).toBe('tokutei');
     expect(emaxis?.assetClass).toBe('fund');
     expect(emaxis?.unitBasis).toBe('10000');
   });
@@ -139,5 +140,34 @@ describe('SBI Holdings CSV Parser', () => {
     expect(result.positions.length).toBe(1);
     expect(result.positions[0].symbol).toBe('1234');
     expect(result.positions[0].accountName).toBe('SBI 特定');
+    expect(result.positions[0].accountType).toBe('tokutei');
+  });
+
+  it('应该正确映射账户类型', () => {
+    const result = parseSBIHoldings(fixtureUtf8);
+    
+    // 检查各类型账户
+    const tokutei = result.positions.find(p => p.accountName === 'SBI 特定');
+    expect(tokutei?.accountType).toBe('tokutei');
+    
+    const nisaGrowth = result.positions.find(p => p.accountName === 'SBI NISA成長');
+    expect(nisaGrowth?.accountType).toBe('nisa_growth');
+    
+    const nisaTsumitate = result.positions.find(p => p.accountName === 'SBI NISAつみたて');
+    expect(nisaTsumitate?.accountType).toBe('nisa_tsumitate');
+  });
+
+  it('应该处理空段（只有表头无数据行）', () => {
+    const result = parseSBIHoldings(fixtureUtf8);
+    
+    // 文件中有「旧つみたてNISA預り」段但无数据行，不应报错
+    expect(result.errors).toEqual([]);
+    
+    // 旧つみたて账户应出现在汇总中，但持仓数为 0
+    const oldTsumitate = result.accountSummaries.find(s => s.accountName === 'SBI 旧つみたて');
+    expect(oldTsumitate).toBeDefined();
+    expect(oldTsumitate?.count).toBe(0);
+    expect(oldTsumitate?.totalValueJpy).toBe('0');
+    expect(oldTsumitate?.matchesFile).toBe(true);
   });
 });
