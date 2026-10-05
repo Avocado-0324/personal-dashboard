@@ -1,6 +1,6 @@
 // 模块类型定义 - 基于架构契约 v0.2
 
-export type ModuleId = 'mail-todos' | 'parenting-tips' | 'github-activity';
+export type ModuleId = 'mail-todos' | 'parenting-tips' | 'github-activity' | 'portfolio';
 export type ConnectorId = 'gmail' | 'github';
 
 export type ModuleManifest = {
