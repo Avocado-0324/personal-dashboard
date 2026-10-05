@@ -951,7 +951,7 @@ export default function PortfolioPage() {
                     }}
                     className={`
                       block border-2 border-dashed rounded-lg p-6 text-center cursor-pointer
-                      transition-colors
+                      transition-colors focus-within:ring-2 focus-within:ring-accent
                       ${isDragging 
                         ? 'border-accent bg-accent/5' 
                         : 'border-card-border bg-tile hover:border-accent/50'
@@ -1011,17 +1011,22 @@ export default function PortfolioPage() {
                         共 {csvPreview.totalRows} 条，按账户：
                       </p>
                       {csvPreview.accountSummaries.map((summary: any, i: number) => (
-                        <div key={i} className="flex items-center justify-between text-xs">
-                          <span className="text-foreground">{summary.accountName}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-muted">{summary.count} 条</span>
-                            <span className="text-muted">¥{parseFloat(summary.totalValueJpy).toLocaleString()}</span>
-                            {summary.matchesFile ? (
-                              <span className="text-up">✓</span>
-                            ) : (
-                              <span className="text-down" title="与文件小计不符">✗</span>
-                            )}
+                        <div key={i} className="text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-foreground">{summary.accountName}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-muted">{summary.count} 条</span>
+                              <span className="text-muted">¥{parseFloat(summary.totalValueJpy).toLocaleString()}</span>
+                              {summary.matchesFile ? (
+                                <span className="text-up">✓</span>
+                              ) : (
+                                <span className="text-down">✗</span>
+                              )}
+                            </div>
                           </div>
+                          {!summary.matchesFile && (
+                            <p className="text-xs text-down mt-1">✗ 与文件小计不符</p>
+                          )}
                         </div>
                       ))}
                       

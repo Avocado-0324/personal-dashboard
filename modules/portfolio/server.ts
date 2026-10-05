@@ -1,10 +1,11 @@
 import { isDatabaseConfigured, getDb } from '@/db/client';
 import { accounts, instruments, snapshots, positions, cashBalances, cashFlows } from '@/db/schema';
-import { eq, desc, and, sql } from 'drizzle-orm';
+import { eq, desc, and, sql, inArray } from 'drizzle-orm';
 import Decimal from 'decimal.js';
 import type { PortfolioData, PortfolioSummary } from './types';
 import { calculateXIRR, isStale, type CashFlow } from './calculations';
 import { ACCOUNT_TYPE_LABELS, ASSET_CLASS_LABELS } from './types';
+import { getLatestSnapshotsByAccount } from './queries';
 
 export async function loadPortfolioData(): Promise<PortfolioData | null> {
   if (!isDatabaseConfigured()) {
@@ -13,35 +14,20 @@ export async function loadPortfolioData(): Promise<PortfolioData | null> {
 
   const db = getDb();
 
-  // 获取所有账户的最新快照
-  const latestSnapshots = await db
-    .select({
-      accountId: positions.accountId,
-      snapshotId: positions.snapshotId,
-      asOf: snapshots.asOf,
-    })
-    .from(positions)
-    .innerJoin(snapshots, eq(positions.snapshotId, snapshots.id))
-    .groupBy(positions.accountId, positions.snapshotId, snapshots.asOf)
-    .orderBy(desc(snapshots.asOf));
+  // 获取每个账户的最新快照（使用共用函数）
+  const accountSnapshots = await getLatestSnapshotsByAccount();
 
-  if (latestSnapshots.length === 0) {
+  if (accountSnapshots.length === 0) {
     return null;
   }
 
-  // 按账户分组，取每个账户最新的快照
-  const accountLatestSnapshotMap = new Map<string, { snapshotId: string; asOf: string }>();
-  for (const snap of latestSnapshots) {
-    if (!accountLatestSnapshotMap.has(snap.accountId)) {
-      accountLatestSnapshotMap.set(snap.accountId, {
-        snapshotId: snap.snapshotId,
-        asOf: snap.asOf,
-      });
-    }
-  }
-
-  const latestSnapshotIds = Array.from(accountLatestSnapshotMap.values()).map(s => s.snapshotId);
-  const latestAsOf = latestSnapshots[0].asOf;
+  const latestSnapshotIds = accountSnapshots.map(s => s.snapshotId);
+  
+  // 取所有账户快照中最新的 asOf 作为整体日期
+  const latestAsOf = accountSnapshots
+    .map(s => s.asOf)
+    .sort()
+    .reverse()[0];
 
   // 获取这些快照的所有持仓
   const allPositions = await db
@@ -53,7 +39,7 @@ export async function loadPortfolioData(): Promise<PortfolioData | null> {
     .from(positions)
     .innerJoin(accounts, eq(positions.accountId, accounts.id))
     .innerJoin(instruments, eq(positions.instrumentId, instruments.id))
-    .where(sql`${positions.snapshotId} IN (${sql.join(latestSnapshotIds.map(id => sql`${id}`), sql`, `)})`);
+    .where(inArray(positions.snapshotId, latestSnapshotIds));
 
   // 获取现金余额
   const allCashBalances = await db
@@ -63,7 +49,7 @@ export async function loadPortfolioData(): Promise<PortfolioData | null> {
     })
     .from(cashBalances)
     .innerJoin(accounts, eq(cashBalances.accountId, accounts.id))
-    .where(sql`${cashBalances.snapshotId} IN (${sql.join(latestSnapshotIds.map(id => sql`${id}`), sql`, `)})`);
+    .where(inArray(cashBalances.snapshotId, latestSnapshotIds));
 
   // 获取所有现金流
   const allCashFlows = await db

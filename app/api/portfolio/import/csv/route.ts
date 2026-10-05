@@ -142,11 +142,12 @@ export async function POST(request: NextRequest) {
             .where(eq(accounts.name, accountName))
             .limit(1);
 
+          // 从 parsedPositions 中找到该账户的类型
+          const accountType = parsedPositions.find(p => p.accountName === accountName)?.accountType || 'tokutei';
+
           let accountId: string;
           if (existingAccounts.length === 0) {
-            // 从 parsedPositions 中找到该账户的类型
-            const accountType = parsedPositions.find(p => p.accountName === accountName)?.accountType || 'tokutei';
-            
+            // 账户不存在，创建新账户
             const [newAccount] = await tx
               .insert(accounts)
               .values({
@@ -157,7 +158,17 @@ export async function POST(request: NextRequest) {
               .returning();
             accountId = newAccount.id;
           } else {
-            accountId = existingAccounts[0].id;
+            // 账户已存在，检查 type 是否一致
+            const existingAccount = existingAccounts[0];
+            accountId = existingAccount.id;
+            
+            if (existingAccount.type !== accountType) {
+              // type 不一致，更新为正确的 type
+              await tx
+                .update(accounts)
+                .set({ type: accountType })
+                .where(eq(accounts.id, accountId));
+            }
           }
           
           accountMap.set(accountName, accountId);
