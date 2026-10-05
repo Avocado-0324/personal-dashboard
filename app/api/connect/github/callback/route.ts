@@ -3,12 +3,22 @@ import { encryptToken } from '@/lib/crypto';
 import { cookies } from 'next/headers';
 import { auth } from '@/lib/auth';
 
+const ERROR_MESSAGES: Record<string, string> = {
+  csrf_detected: 'GitHub 连接失败：安全验证失败，请重试',
+  token_exchange_failed: 'GitHub 连接失败：无法获取访问令牌，请重试',
+  user_fetch_failed: 'GitHub 连接失败：无法获取用户信息，请重试',
+  callback_failed: 'GitHub 连接失败，请重试',
+  invalid_request: 'GitHub 连接失败：请求无效，请重试',
+  github_auth_failed: 'GitHub 连接失败，请重试',
+};
+
 export async function GET(request: NextRequest) {
   try {
     const session = await auth();
     
     if (!session?.user) {
-      return NextResponse.redirect(`${process.env.NEXTAUTH_URL}/auth/signin?error=未登录`);
+      const signInUrl = new URL('/auth/signin', request.url);
+      return NextResponse.redirect(signInUrl);
     }
 
     const searchParams = request.nextUrl.searchParams;
@@ -18,11 +28,15 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('GitHub OAuth error:', error);
-      return NextResponse.redirect(`${process.env.NEXTAUTH_URL}/settings?error=github_auth_failed`);
+      const settingsUrl = new URL('/settings', request.url);
+      settingsUrl.searchParams.set('error', 'GitHub 连接失败，请重试');
+      return NextResponse.redirect(settingsUrl);
     }
 
     if (!code || !state) {
-      return NextResponse.redirect(`${process.env.NEXTAUTH_URL}/settings?error=invalid_request`);
+      const settingsUrl = new URL('/settings', request.url);
+      settingsUrl.searchParams.set('error', 'GitHub 连接失败：请求无效，请重试');
+      return NextResponse.redirect(settingsUrl);
     }
 
     const cookieStore = await cookies();
@@ -30,7 +44,9 @@ export async function GET(request: NextRequest) {
 
     if (!storedState || storedState.value !== state) {
       console.error('State mismatch - CSRF detected');
-      return NextResponse.redirect(`${process.env.NEXTAUTH_URL}/settings?error=csrf_detected`);
+      const settingsUrl = new URL('/settings', request.url);
+      settingsUrl.searchParams.set('error', 'GitHub 连接失败：安全验证失败，请重试');
+      return NextResponse.redirect(settingsUrl);
     }
 
     cookieStore.delete('github_oauth_state');
@@ -52,7 +68,9 @@ export async function GET(request: NextRequest) {
 
     if (tokenData.error || !tokenData.access_token) {
       console.error('GitHub token exchange failed:', tokenData);
-      return NextResponse.redirect(`${process.env.NEXTAUTH_URL}/settings?error=token_exchange_failed`);
+      const settingsUrl = new URL('/settings', request.url);
+      settingsUrl.searchParams.set('error', 'GitHub 连接失败：无法获取访问令牌，请重试');
+      return NextResponse.redirect(settingsUrl);
     }
 
     const userResponse = await fetch('https://api.github.com/user', {
@@ -65,7 +83,9 @@ export async function GET(request: NextRequest) {
 
     if (!userResponse.ok) {
       console.error('Failed to fetch GitHub user');
-      return NextResponse.redirect(`${process.env.NEXTAUTH_URL}/settings?error=user_fetch_failed`);
+      const settingsUrl = new URL('/settings', request.url);
+      settingsUrl.searchParams.set('error', 'GitHub 连接失败：无法获取用户信息，请重试');
+      return NextResponse.redirect(settingsUrl);
     }
 
     const userData = await userResponse.json();
@@ -88,9 +108,13 @@ export async function GET(request: NextRequest) {
 
     cookieStore.delete('pd_github_disconnected');
 
-    return NextResponse.redirect(`${process.env.NEXTAUTH_URL}/settings?success=github_connected`);
+    const settingsUrl = new URL('/settings', request.url);
+    settingsUrl.searchParams.set('success', 'github_connected');
+    return NextResponse.redirect(settingsUrl);
   } catch (error) {
     console.error('GitHub OAuth callback error:', error);
-    return NextResponse.redirect(`${process.env.NEXTAUTH_URL}/settings?error=callback_failed`);
+    const settingsUrl = new URL('/settings', request.url);
+    settingsUrl.searchParams.set('error', 'GitHub 连接失败，请重试');
+    return NextResponse.redirect(settingsUrl);
   }
 }

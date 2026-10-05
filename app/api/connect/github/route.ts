@@ -1,19 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateState } from '@/lib/crypto';
 import { cookies } from 'next/headers';
-import { auth } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
-    
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: '未登录，请先使用 Google 登录' },
-        { status: 401 }
-      );
-    }
-
     const state = generateState();
     
     const cookieStore = await cookies();
@@ -37,9 +27,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(authUrl);
   } catch (error) {
     console.error('GitHub OAuth start error:', error);
-    return NextResponse.json(
-      { error: '启动 GitHub 认证失败' },
-      { status: 500 }
-    );
+    const settingsUrl = new URL('/settings', request.url);
+    settingsUrl.searchParams.set('error', 'github_start_failed');
+    return NextResponse.redirect(settingsUrl);
   }
 }

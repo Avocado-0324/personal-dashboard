@@ -31,6 +31,10 @@ export async function load(ctx: ModuleContext): Promise<ModuleLoadResult<GithubA
       fetchedAt: new Date().toISOString(),
     };
   } catch (error) {
+    if (error instanceof Error && (error as any).code === 'GITHUB_UNAUTHORIZED') {
+      return { status: 'disconnected', connector: 'github' };
+    }
+    
     return {
       status: 'error',
       message: error instanceof Error ? error.message : 'Failed to fetch GitHub activity',

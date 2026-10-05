@@ -110,6 +110,11 @@ export async function fetchGithubActivity(): Promise<{
   );
 
   if (!eventsResponse.ok) {
+    if (eventsResponse.status === 401) {
+      const error = new Error('GitHub token expired or invalid');
+      (error as any).code = 'GITHUB_UNAUTHORIZED';
+      throw error;
+    }
     throw new Error('Failed to fetch GitHub events');
   }
 
