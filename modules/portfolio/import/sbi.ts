@@ -1,11 +1,12 @@
 import Decimal from 'decimal.js';
 import { createHash } from 'crypto';
+import * as iconv from 'iconv-lite';
 
 /**
  * SBI「保有証券一覧」CSV 解析（仅日本持仓）
  * 
  * 格式：
- * - 第一行：保有証券一覧
+ * - 第一行（或跳过空行后）：保有証券一覧
  * - 交替出现：汇总块（合计）→ 详细块（明细），空行分隔
  * - 股票和基金两种类型，每种类型下有多个"預り"（custody）
  * - Shift_JIS 编码
@@ -58,16 +59,7 @@ const CUSTODY_TO_ACCOUNT: Record<string, string> = {
  * Shift_JIS 二进制解码（Node.js 环境）
  */
 export function decodeShiftJIS(buffer: ArrayBuffer): string {
-  // 使用 iconv-lite 或 TextDecoder（如果支持）
-  try {
-    // Node.js 环境
-    const iconv = require('iconv-lite');
-    return iconv.decode(Buffer.from(buffer), 'shift_jis');
-  } catch {
-    // 浏览器环境 fallback（需要 polyfill）
-    const decoder = new TextDecoder('shift_jis');
-    return decoder.decode(buffer);
-  }
+  return iconv.decode(Buffer.from(buffer), 'shift_jis');
 }
 
 /**
@@ -165,16 +157,34 @@ export function parseSBIHoldings(csvText: string): ParseResult {
     fileSubtotal?: string;
   }> = [];
 
-  // 第一行应为「保有証券一覧」
-  if (lines.length === 0 || !lines[0].includes('保有証券一覧')) {
+  // 跳过文件开头的空行和可选 BOM，查找「保有証券一覧」标题
+  let i = 0;
+  let foundTitle = false;
+  
+  while (i < lines.length) {
+    const line = lines[i].replace(/^\uFEFF/, '').trim(); // 去除 BOM
+    
+    if (line.includes('保有証券一覧')) {
+      foundTitle = true;
+      i++; // 移到标题行后
+      break;
+    }
+    
+    // 如果遇到非空行但不是标题，说明格式错误
+    if (line && !line.includes('保有証券一覧')) {
+      break;
+    }
+    
+    i++;
+  }
+  
+  if (!foundTitle) {
     errors.push({
       row: 1,
       message: '这不是 SBI 保有証券一覧格式的 CSV。请前往：SBI → 口座管理 > 保有証券 > CSV ダウンロード',
     });
     return { positions, errors, accountSummaries };
   }
-
-  let i = 1;
   
   while (i < lines.length) {
     const line = lines[i].trim();

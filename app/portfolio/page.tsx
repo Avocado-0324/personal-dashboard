@@ -1026,7 +1026,7 @@ export default function PortfolioPage() {
                         </div>
                       ))}
                       
-                      {csvErrors.length === 0 ? (
+                      {csvErrors.length === 0 && csvPreview.totalRows > 0 ? (
                         <button
                           onClick={handleCSVImport}
                           disabled={importing}
@@ -1036,7 +1036,11 @@ export default function PortfolioPage() {
                         </button>
                       ) : (
                         <div className="mt-3">
-                          <p className="text-xs text-down mb-1">有错误，无法导入：</p>
+                          {csvPreview.totalRows === 0 ? (
+                            <p className="text-xs text-muted mb-1">没有可导入的持仓</p>
+                          ) : (
+                            <p className="text-xs text-down mb-1">有错误，无法导入</p>
+                          )}
                           <button
                             disabled
                             className="w-full px-4 py-2 bg-tile text-muted rounded opacity-50 cursor-not-allowed"

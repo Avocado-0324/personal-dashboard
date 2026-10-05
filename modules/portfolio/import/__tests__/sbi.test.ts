@@ -127,4 +127,17 @@ describe('SBI Holdings CSV Parser', () => {
     expect(result.errors).toEqual([]);
     expect(result.positions[0].accountName).toBe('SBI NISA成長');
   });
+
+  it('应该跳过文件开头的空行', () => {
+    const fixtureEmptyFirstLine = fs.readFileSync(
+      path.join(__dirname, 'fixtures/sbi-holdings-empty-first-line.csv'),
+      'utf-8'
+    );
+    
+    const result = parseSBIHoldings(fixtureEmptyFirstLine);
+    expect(result.errors).toEqual([]);
+    expect(result.positions.length).toBe(1);
+    expect(result.positions[0].symbol).toBe('1234');
+    expect(result.positions[0].accountName).toBe('SBI 特定');
+  });
 });
