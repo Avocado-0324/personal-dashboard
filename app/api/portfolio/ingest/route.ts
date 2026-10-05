@@ -4,6 +4,7 @@ import { getPoolDb, isDatabaseConfigured } from '@/db/client';
 import { importBatches, snapshots, accounts, instruments, positions, cashBalances, cashFlows } from '@/db/schema';
 import { eq, sql, and } from 'drizzle-orm';
 import { timingSafeEqual } from 'crypto';
+import { isUniqueViolation } from '@/db/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -343,7 +344,7 @@ export async function POST(request: NextRequest) {
       );
     } catch (txError: any) {
       // 处理唯一约束冲突（并发导入）
-      if (txError?.code === '23505' && txError?.constraint?.includes('idempotency_key')) {
+      if (isUniqueViolation(txError, 'import_batches_idempotency_key_unique_not_reverted')) {
         // 并发冲突，重新查询已导入的批次
         const existingBatches = await db
           .select()
