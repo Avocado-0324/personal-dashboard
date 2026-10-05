@@ -101,7 +101,9 @@ function SettingsContent() {
   }, []);
 
   const handleToggleModule = (moduleId: string) => {
-    const currentEnabled = (settings.modules as any)[moduleId]?.enabled !== false;
+    const userPref = (settings.modules as any)[moduleId];
+    const defaultEnabled = moduleId === 'portfolio' ? false : true;
+    const currentEnabled = userPref?.enabled ?? defaultEnabled;
     toggleModule(moduleId, !currentEnabled);
     setSettings(getUserSettings());
     setTimeout(() => router.refresh(), 100);

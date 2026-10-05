@@ -80,11 +80,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 书き込み（トランザクション）
+    // 写入（事务）
     const db = getDb();
 
     try {
-      // トランザクション開始
+      // 事务开始
       await db.transaction(async (tx) => {
         // アカウント取得または作成
         const accountRecords = await tx
@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
           })
           .returning();
 
-        // 各ポジションを書き込み
+        // 写入各持仓
         for (const pos of parsedPositions) {
           // Instrument 取得または作成
           let instrumentRecords = await tx
@@ -177,12 +177,12 @@ export async function POST(request: NextRequest) {
         { headers: { 'Cache-Control': 'no-store' } }
       );
     } catch (txError) {
-      // トランザクション失敗
+      // 事务失败
       console.error('Transaction failed:', txError);
       return NextResponse.json(
         {
           imported: 0,
-          errors: [{ row: 0, message: 'トランザクションが失敗しました' }],
+          errors: [{ row: 0, message: '事务失败' }],
         },
         { status: 500, headers: { 'Cache-Control': 'no-store' } }
       );
