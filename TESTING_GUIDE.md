@@ -45,6 +45,25 @@ npm run dev
 
 ## 测试场景
 
+### 场景 0: 未认证访问保护 (新增)
+
+#### 测试 0.1: 未登录访问首页
+1. 打开无痕/隐私浏览窗口
+2. 访问 http://localhost:3000
+3. ✅ **预期结果**: 自动重定向到 `/auth/signin`
+
+#### 测试 0.2: 未登录访问设置页
+1. 在无痕窗口中访问 http://localhost:3000/settings
+2. ✅ **预期结果**: 自动重定向到 `/auth/signin`
+
+#### 测试 0.3: 未登录访问 GitHub 连接
+1. 在无痕窗口中访问 http://localhost:3000/api/connect/github
+2. ✅ **预期结果**: 自动重定向到 `/auth/signin`
+
+#### 测试 0.4: OAuth callback 保持可访问
+1. 确认 OAuth callback 路由不被 middleware 阻止
+2. ✅ **预期结果**: GitHub OAuth 流程正常工作
+
 ### 场景 1: 登录页面和访问控制
 
 #### 测试 1.1: 授权账号登录
@@ -166,6 +185,46 @@ npm run dev
 
 ### 场景 7: 安全性验证
 
+#### 测试 7.4: GitHub API 401 处理 (新增 - 架构要求)
+1. 使用 `niqinou@gmail.com` 登录
+2. 连接 GitHub 账号
+3. 在 GitHub Settings > Applications > Authorized OAuth Apps 中撤销此应用的授权
+4. 刷新首页
+5. ✅ **预期结果**: 
+   - GitHub 活跃度卡片显示「未连接 GitHub」
+   - 显示「去连接」按钮
+   - **不会崩溃或显示错误页面**
+   - 页面其他部分（如邮件待办）仍正常显示
+6. 点击「去连接」
+7. ✅ **预期结果**: 可以重新连接 GitHub
+
+### 场景 8: 友好的错误消息 (新增 - 体验要求)
+
+#### 测试 8.1: GitHub 连接失败
+1. 修改 `.env.local` 中的 `GITHUB_CLIENT_SECRET`（设置为无效值）
+2. 登录并尝试连接 GitHub
+3. 在 GitHub 授权页面批准
+4. ✅ **预期结果**: 
+   - 重定向回 `/settings`
+   - 显示红色错误框：「GitHub 连接失败：无法获取访问令牌，请重试」
+   - **不显示** raw JSON 或 error codes
+
+#### 测试 8.2: GitHub 连接成功
+1. 恢复正确的 `GITHUB_CLIENT_SECRET`
+2. 再次连接 GitHub
+3. ✅ **预期结果**: 
+   - 重定向回 `/settings`
+   - 显示绿色成功框：「GitHub 已成功连接」
+
+#### 测试 8.3: CSRF 保护错误
+1. 手动构造一个无效的 callback URL（不含正确的 state）
+2. 访问该 URL
+3. ✅ **预期结果**: 
+   - 重定向回 `/settings`
+   - 显示友好错误：「GitHub 连接失败：安全验证失败，请重试」
+
+### 场景 7: 安全性验证
+
 #### 测试 7.1: CSRF 保护
 1. 打开浏览器开发者工具，切换到 Network 标签
 2. 点击 GitHub 的「连接」按钮
@@ -235,6 +294,7 @@ npm run dev
 
 - ✅ 只有 `niqinou@gmail.com` 可以登录
 - ✅ 其他账号显示友好的拒绝提示
+- ✅ **未登录访问首页/设置页自动重定向到登录页**
 - ✅ 连接 Gmail 后连接 GitHub，两者都保持连接
 - ✅ 连接 GitHub 后连接 Gmail，两者都保持连接
 - ✅ 刷新页面后两个连接都保持
@@ -245,3 +305,6 @@ npm run dev
 - ✅ OAuth state 参数存在且被验证
 - ✅ GitHub token 被加密存储
 - ✅ Google refresh token 机制生效
+- ✅ **GitHub API 401 后显示「未连接」而不是崩溃**
+- ✅ **所有错误消息都是友好的中文提示**
+- ✅ **Middleware 集中处理认证保护**

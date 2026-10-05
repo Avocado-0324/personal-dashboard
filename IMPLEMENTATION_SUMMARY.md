@@ -38,23 +38,44 @@
    - From 字段解析：优先显示名称，否则显示邮箱
    - 永远不显示 "Unknown"
 
+### 审阅修复 (新增)
+7. ✅ **GitHub API 401 处理（架构硬要求）**
+   - GitHub API 返回 401 时，模块返回 `disconnected` 状态
+   - 显示「未连接 GitHub」+「去连接」按钮
+   - **不在 RSC render 中删除 cookie**（避免 Next.js 错误）
+   - 重新连接时会覆盖旧 cookie
+
+8. ✅ **未认证访问控制（体验硬要求）**
+   - 创建 `middleware.ts` 集中处理认证保护
+   - 使用 `auth()` from `lib/auth.ts` 检查认证状态
+   - Matcher 排除：`/auth/signin`、`/api/auth/*`、`/api/connect/github/callback`、静态资源
+   - 未登录访问首页或设置页自动重定向到 `/auth/signin`
+   - Gmail 连接按钮调用 `signIn('google')` 启动登录
+   - GitHub connect 路由由 middleware 保护（未登录重定向）
+
+9. ✅ **友好的错误消息（体验要求）**
+   - GitHub callback 失败显示中文错误（如「GitHub 连接失败，请重试」）
+   - Settings 页面显示错误和成功消息
+   - 不再返回原始 JSON error 或 opaque error codes
+
 ### 文档
-7. ✅ **PR 描述包含回调 URL**
+10. ✅ **PR 描述包含回调 URL**
    - 开发环境：`http://localhost:3000/api/connect/github/callback`
    - 生产环境：`https://[deployed-host]/api/connect/github/callback`
    - 列出所有环境变量要求
    - 说明 `AUTH_SECRET` 用于加密 GitHub token
 
-8. ✅ **测试指南**
+11. ✅ **测试指南**
    - 创建 `TESTING_GUIDE.md`
-   - 覆盖所有测试场景
+   - 覆盖所有测试场景（包括新的 401 和错误消息测试）
    - 包含故障排查指南
 
 ### 代码质量
-9. ✅ **构建通过**
+12. ✅ **构建通过**
    - `npm run build` 成功
    - 无 TypeScript 错误
    - 无 lint 错误
+   - Middleware 正确编译
 
 ## 实现的文件
 
@@ -63,14 +84,17 @@
 - `app/api/connect/github/route.ts` - GitHub OAuth 启动
 - `app/api/connect/github/callback/route.ts` - GitHub OAuth 回调处理
 - `app/auth/signin/page.tsx` - 自定义登录页面
+- `middleware.ts` - **集中式认证保护**
 - `TESTING_GUIDE.md` - 完整测试指南
+- `IMPLEMENTATION_SUMMARY.md` - 本文档
 
 ### 修改的文件
 - `lib/auth.ts` - 只保留 Google provider + email 限制 + refresh token 逻辑
-- `lib/connectors/github.ts` - 读取独立 cookie + token 解密
+- `lib/connectors/github.ts` - 读取独立 cookie + token 解密 + **401 错误处理**
 - `lib/connectors/gmail.ts` - 邮件解析优化
+- `modules/github-activity/server.ts` - **捕获 401 返回 disconnected 状态**
 - `app/api/github/disconnect/route.ts` - 清除 GitHub cookie
-- `app/settings/page.tsx` - 更新连接/断开按钮 + 添加登出按钮
+- `app/settings/page.tsx` - 更新连接/断开按钮 + 添加登出按钮 + **显示错误消息** + Suspense
 - `.env.example` - 更新环境变量说明
 
 ### 删除的文件
