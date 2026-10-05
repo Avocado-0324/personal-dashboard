@@ -52,6 +52,18 @@ export default function PortfolioPage() {
   const [error, setError] = useState<string | null>(null);
   const [moduleEnabled, setModuleEnabled] = useState(true);
   
+  // 消息提示状态
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [importWarning, setImportWarning] = useState<{ message: string; batchId: string } | null>(null);
+  
+  // 撤销确认状态
+  const [revertConfirm, setRevertConfirm] = useState<string | null>(null);
+  
+  // 补汇率状态
+  const [editingFxRate, setEditingFxRate] = useState<{ positionIndex: number; currency: string } | null>(null);
+  const [fxRateInput, setFxRateInput] = useState('');
+  
   // 手动录入表单状态
   const [showNewAccountForm, setShowNewAccountForm] = useState(false);
   const [showNewCashFlowForm, setShowNewCashFlowForm] = useState(false);
@@ -71,9 +83,9 @@ export default function PortfolioPage() {
   const [csvPreview, setCsvPreview] = useState<any>(null);
   const [csvErrors, setCsvErrors] = useState<any[]>([]);
   const [importing, setImporting] = useState(false);
+  const [csvValidationError, setCsvValidationError] = useState<string | null>(null);
 
   useEffect(() => {
-    // 检查模块是否启用
     const settings = getUserSettings();
     const allModules = getAllModules();
     const portfolioModule = allModules.find(m => m.manifest.id === 'portfolio');
@@ -179,9 +191,10 @@ export default function PortfolioPage() {
 
   async function handleCSVDryRun() {
     if (!csvFile || !csvAccountName || !csvAsOf) {
-      alert('请输入文件、账户名和日期');
+      setCsvValidationError('请输入文件、账户名和日期');
       return;
     }
+    setCsvValidationError(null);
 
     const formData = new FormData();
     formData.append('file', csvFile);
@@ -203,15 +216,16 @@ export default function PortfolioPage() {
       }
     } catch (error) {
       console.error('CSV dry-run failed:', error);
-      alert('CSV 预览失败');
+      setErrorMessage('CSV 预览失败');
     }
   }
 
   async function handleCSVImport() {
     if (!csvFile || !csvAccountName || !csvAsOf) {
-      alert('请输入文件、账户名和日期');
+      setCsvValidationError('请输入文件、账户名和日期');
       return;
     }
+    setCsvValidationError(null);
 
     setImporting(true);
 
@@ -229,13 +243,9 @@ export default function PortfolioPage() {
       const json = await res.json();
       if (res.ok) {
         if (json.alreadyImported) {
-          // 重复导入
-          if (confirm(`${json.message}\n\n点击"确定"查看这批记录`)) {
-            setActiveTab('imports');
-          }
+          setImportWarning({ message: json.message, batchId: json.batchId });
         } else {
-          // 新导入成功
-          alert(`导入完成：${json.imported} 条`);
+          setSuccessMessage(`导入完成：${json.imported} 条`);
         }
         setCsvFile(null);
         setCsvPreview(null);
@@ -244,35 +254,67 @@ export default function PortfolioPage() {
         loadBatches();
       } else {
         setCsvErrors(json.errors || [{ row: 0, message: json.error }]);
-        alert(`导入失败：${json.errors?.length || 0} 个错误`);
+        setErrorMessage(`导入失败：${json.errors?.length || 0} 个错误`);
       }
     } catch (error) {
       console.error('CSV import failed:', error);
-      alert('CSV 导入失败');
+      setErrorMessage('CSV 导入失败');
     } finally {
       setImporting(false);
     }
   }
 
   async function handleRevertBatch(batchId: string) {
-    if (!confirm('确定要撤销此批次吗？')) return;
-
     try {
       const res = await fetch(`/api/portfolio/batches/${batchId}/revert`, {
         method: 'POST',
       });
       
       if (res.ok) {
-        alert('批次已撤销');
+        setSuccessMessage('批次已撤销');
+        setRevertConfirm(null);
         loadBatches();
         loadData();
       } else {
         const json = await res.json();
-        alert(`撤销失败：${json.error}`);
+        setErrorMessage(`撤销失败：${json.error}`);
       }
     } catch (error) {
       console.error('Revert batch failed:', error);
-      alert('批次撤销失败');
+      setErrorMessage('批次撤销失败');
+    }
+  }
+
+  async function handleSaveFxRate(positionIndex: number) {
+    if (!data?.positions[positionIndex]) return;
+    
+    const pos = data.positions[positionIndex];
+    const fxRate = parseFloat(fxRateInput);
+    
+    if (isNaN(fxRate) || fxRate <= 0) {
+      setErrorMessage('请输入有效的汇率');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/portfolio/positions/${pos.position.id}/fx-rate`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fxRateToJpy: fxRate.toString() }),
+      });
+
+      if (res.ok) {
+        setSuccessMessage('汇率已更新');
+        setEditingFxRate(null);
+        setFxRateInput('');
+        loadData();
+      } else {
+        const json = await res.json();
+        setErrorMessage(`更新失败：${json.error || '未知错误'}`);
+      }
+    } catch (error) {
+      console.error('Failed to update FX rate:', error);
+      setErrorMessage('更新汇率失败');
     }
   }
 
@@ -305,7 +347,6 @@ export default function PortfolioPage() {
     
     return (
       <div className="min-h-screen bg-background">
-        {/* 顶栏 */}
         <header className="border-b border-card-border">
           <div className="max-w-7xl mx-auto px-4 py-4 flex items-center gap-4">
             <Link href="/" className="text-muted hover:text-foreground">
@@ -349,7 +390,6 @@ export default function PortfolioPage() {
     for (const { position, instrument } of data.positions) {
       const fxRateRaw = position.fxRateToJpy;
       
-      // 缺汇率跳过
       if (!fxRateRaw || fxRateRaw === null) {
         missingFxCount++;
         continue;
@@ -364,13 +404,11 @@ export default function PortfolioPage() {
     }
   }
 
-  // 计算现金余额
   if (data?.cashBalances) {
     for (const { cash } of data.cashBalances) {
       const amount = new Decimal(cash.amount);
       const fxRateRaw = cash.fxRateToJpy;
       
-      // 缺汇率跳过
       if (!fxRateRaw || fxRateRaw === null) {
         missingFxCount++;
         continue;
@@ -395,7 +433,6 @@ export default function PortfolioPage() {
 
   const pnl = totalValue.minus(netContribution);
   
-  // 计算 XIRR
   let xirr: Decimal | null = null;
   if (cashFlows.length > 0 && data?.snapshots && data.snapshots.length > 0) {
     const flows: Array<{ date: Date; amount: Decimal }> = cashFlows.map(({ cashFlow }) => ({
@@ -405,7 +442,6 @@ export default function PortfolioPage() {
         : new Decimal(cashFlow.amountJpy),
     }));
     
-    // 加上终值
     const latestAsOf = data.snapshots[0].asOf;
     flows.push({
       date: new Date(latestAsOf),
@@ -417,7 +453,6 @@ export default function PortfolioPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* 顶栏 */}
       <header className="border-b border-card-border">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -435,6 +470,48 @@ export default function PortfolioPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-8">
+        {/* 消息提示 */}
+        {successMessage && (
+          <div className="mb-4 p-4 bg-lime-500/10 border border-lime-500/20 rounded-lg flex justify-between items-center">
+            <p className="text-lime-400">{successMessage}</p>
+            <button onClick={() => setSuccessMessage(null)} className="text-lime-400 hover:opacity-80">
+              ✕
+            </button>
+          </div>
+        )}
+
+        {errorMessage && (
+          <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex justify-between items-center">
+            <p className="text-red-400">{errorMessage}</p>
+            <button onClick={() => setErrorMessage(null)} className="text-red-400 hover:opacity-80">
+              ✕
+            </button>
+          </div>
+        )}
+
+        {importWarning && (
+          <div className="mb-4 p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+            <p className="text-amber-400 mb-3">{importWarning.message}</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setActiveTab('imports');
+                  setImportWarning(null);
+                }}
+                className="px-4 py-2 bg-amber-500/20 text-amber-400 rounded hover:bg-amber-500/30"
+              >
+                查看这批
+              </button>
+              <button
+                onClick={() => setImportWarning(null)}
+                className="px-4 py-2 bg-tile text-muted rounded hover:bg-card-border"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* KPI 卡片 */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <div className="rounded-card bg-card-bg border border-card-border p-4">
@@ -548,6 +625,8 @@ export default function PortfolioPage() {
                               marketValue = '¥' + value.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
                             }
                             
+                            const isEditing = editingFxRate?.positionIndex === i;
+                            
                             return (
                               <tr key={i} className="border-b border-card-border">
                                 <td className="py-3 text-foreground">{pos.instrument.name}</td>
@@ -558,13 +637,47 @@ export default function PortfolioPage() {
                                 <td className="py-3 text-right font-mono text-foreground">
                                   {parseFloat(pos.position.price).toFixed(2)}
                                 </td>
-                                <td className={`py-3 text-right font-mono ${fxRateRaw ? 'text-foreground' : 'text-amber-500'}`}>
-                                  {fxRateRaw ? marketValue : (
+                                <td className="py-3 text-right">
+                                  {fxRateRaw ? (
+                                    <span className="font-mono text-foreground">{marketValue}</span>
+                                  ) : isEditing ? (
                                     <div className="flex items-center justify-end gap-2">
-                                      <span>缺少汇率</span>
-                                      <button 
+                                      <span className="text-xs text-muted">1 {pos.instrument.currency} =</span>
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        value={fxRateInput}
+                                        onChange={(e) => setFxRateInput(e.target.value)}
+                                        placeholder="0.00"
+                                        className="w-20 px-2 py-1 text-xs bg-card-bg border border-card-border rounded text-foreground"
+                                        autoFocus
+                                      />
+                                      <span className="text-xs text-muted">JPY</span>
+                                      <button
+                                        onClick={() => handleSaveFxRate(i)}
                                         className="text-xs px-2 py-1 bg-accent text-background rounded hover:opacity-80"
-                                        onClick={() => alert('编辑汇率功能开发中')}
+                                      >
+                                        保存
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setEditingFxRate(null);
+                                          setFxRateInput('');
+                                        }}
+                                        className="text-xs px-2 py-1 bg-tile text-muted rounded hover:bg-card-border"
+                                      >
+                                        取消
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center justify-end gap-2 text-amber-500">
+                                      <span>缺少汇率，未计入总资产</span>
+                                      <button
+                                        onClick={() => {
+                                          setEditingFxRate({ positionIndex: i, currency: pos.instrument.currency });
+                                          setFxRateInput('');
+                                        }}
+                                        className="text-xs px-2 py-1 bg-accent text-background rounded hover:opacity-80 whitespace-nowrap"
                                       >
                                         补汇率
                                       </button>
@@ -734,12 +847,34 @@ export default function PortfolioPage() {
                               </span>
                             </div>
                             {batch.status === 'committed' && (
-                              <button
-                                onClick={() => handleRevertBatch(batch.id)}
-                                className="px-3 py-1 text-sm bg-red-500/10 text-red-400 rounded hover:bg-red-500/20"
-                              >
-                                撤销
-                              </button>
+                              <div>
+                                {revertConfirm === batch.id ? (
+                                  <div className="flex flex-col gap-2">
+                                    <p className="text-xs text-muted mb-1">确定要撤销此批次吗？</p>
+                                    <div className="flex gap-2">
+                                      <button
+                                        onClick={() => handleRevertBatch(batch.id)}
+                                        className="px-3 py-1 text-xs bg-red-500/20 text-red-400 rounded hover:bg-red-500/30"
+                                      >
+                                        确认撤销
+                                      </button>
+                                      <button
+                                        onClick={() => setRevertConfirm(null)}
+                                        className="px-3 py-1 text-xs bg-tile text-muted rounded hover:bg-card-border"
+                                      >
+                                        取消
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => setRevertConfirm(batch.id)}
+                                    className="px-3 py-1 text-sm bg-red-500/10 text-red-400 rounded hover:bg-red-500/20"
+                                  >
+                                    撤销
+                                  </button>
+                                )}
+                              </div>
                             )}
                           </div>
                         </div>
@@ -763,6 +898,13 @@ export default function PortfolioPage() {
               {/* CSV 导入 */}
               <div className="mb-6">
                 <h4 className="text-sm font-medium text-foreground mb-3">CSV 导入</h4>
+                
+                {csvValidationError && (
+                  <div className="mb-3 p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-400">
+                    {csvValidationError}
+                  </div>
+                )}
+                
                 <div className="space-y-3">
                   <input
                     type="file"
