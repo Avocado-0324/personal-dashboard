@@ -256,18 +256,23 @@ export default function PortfolioPage() {
   // 计算KPI
   let totalValue = new Decimal(0);
   let totalCash = new Decimal(0);
+  let missingFxCount = 0;
   
   if (data?.positions) {
     for (const { position, instrument } of data.positions) {
-      const qty = new Decimal(position.quantity);
-      const price = new Decimal(position.price);
       const fxRateRaw = position.fxRateToJpy;
-      const unitBasis = new Decimal(instrument.unitBasis);
       
       // 缺汇率跳过
-      if (!fxRateRaw || fxRateRaw === null) continue;
+      if (!fxRateRaw || fxRateRaw === null) {
+        missingFxCount++;
+        continue;
+      }
       
+      const qty = new Decimal(position.quantity);
+      const price = new Decimal(position.price);
       const fxRate = new Decimal(fxRateRaw);
+      const unitBasis = new Decimal(instrument.unitBasis);
+      
       totalValue = totalValue.plus(qty.times(price).div(unitBasis).times(fxRate));
     }
   }
@@ -279,7 +284,10 @@ export default function PortfolioPage() {
       const fxRateRaw = cash.fxRateToJpy;
       
       // 缺汇率跳过
-      if (!fxRateRaw || fxRateRaw === null) continue;
+      if (!fxRateRaw || fxRateRaw === null) {
+        missingFxCount++;
+        continue;
+      }
       
       const fxRate = new Decimal(fxRateRaw);
       const value = amount.times(fxRate);
@@ -330,6 +338,11 @@ export default function PortfolioPage() {
               ← 返回首页
             </Link>
             <h1 className="text-xl font-bold text-gray-100">持仓管理</h1>
+            {missingFxCount > 0 && (
+              <span className="text-sm text-amber-500">
+                缺少 {missingFxCount} 个汇率
+              </span>
+            )}
           </div>
         </div>
       </header>
@@ -432,10 +445,16 @@ export default function PortfolioPage() {
                         </thead>
                         <tbody>
                           {data.positions.map((pos, i) => {
-                            const value = new Decimal(pos.position.quantity)
-                              .times(new Decimal(pos.position.price))
-                              .div(new Decimal(pos.instrument.unitBasis))
-                              .times(new Decimal(pos.position.fxRateToJpy));
+                            const fxRateRaw = pos.position.fxRateToJpy;
+                            let marketValue = '缺汇率';
+                            
+                            if (fxRateRaw && fxRateRaw !== null) {
+                              const value = new Decimal(pos.position.quantity)
+                                .times(new Decimal(pos.position.price))
+                                .div(new Decimal(pos.instrument.unitBasis))
+                                .times(new Decimal(fxRateRaw));
+                              marketValue = '¥' + value.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                            }
                             
                             return (
                               <tr key={i} className="border-b border-gray-800">
@@ -447,8 +466,8 @@ export default function PortfolioPage() {
                                 <td className="py-3 text-right font-mono text-gray-100">
                                   {parseFloat(pos.position.price).toFixed(2)}
                                 </td>
-                                <td className="py-3 text-right font-mono text-gray-100">
-                                  ¥{value.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                                <td className={`py-3 text-right font-mono ${fxRateRaw ? 'text-gray-100' : 'text-amber-500'}`}>
+                                  {marketValue}
                                 </td>
                               </tr>
                             );

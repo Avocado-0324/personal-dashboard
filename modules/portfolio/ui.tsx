@@ -90,6 +90,11 @@ export function PortfolioCard({
                 数据已 {Math.floor((Date.now() - new Date(data.asOf).getTime()) / (1000 * 60 * 60 * 24))} 天未更新
               </p>
             )}
+            {data.missingFxCount > 0 && (
+              <p className="text-xs text-amber-500 mt-1">
+                缺少 {data.missingFxCount} 个汇率
+              </p>
+            )}
           </div>
         </div>
         <div className="flex gap-3 text-sm">

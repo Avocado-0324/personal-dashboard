@@ -218,7 +218,9 @@ export async function POST(request: NextRequest) {
           quantity: pos.quantity,
           avgCost: pos.avgCost,
           price: pos.price,
-          fxRateToJpy: pos.fxRateToJpy || '1',
+          fxRateToJpy: pos.currency === 'JPY' 
+            ? (pos.fxRateToJpy && pos.fxRateToJpy !== '' ? pos.fxRateToJpy : '1')
+            : (pos.fxRateToJpy && pos.fxRateToJpy !== '' ? pos.fxRateToJpy : null),
         });
 
         positionsInserted++;

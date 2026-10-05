@@ -6,6 +6,7 @@ export type PortfolioData = {
   pnlJpy: string;
   pnlRatio: string | null;
   xirr: string | null;
+  missingFxCount: number;
   allocationByAccount: Array<{
     accountType: string;
     label: string;

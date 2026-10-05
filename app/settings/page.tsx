@@ -179,7 +179,9 @@ function SettingsContent() {
             <h2 className="text-lg font-bold mb-4">模块管理</h2>
             <div className="space-y-3">
               {allModulesConfig.map((module) => {
-                const enabled = settings.modules[module.manifest.id]?.enabled !== false;
+                const userPref = settings.modules[module.manifest.id];
+                const defaultEnabled = module.manifest.id === 'portfolio' ? false : true;
+                const enabled = userPref?.enabled ?? defaultEnabled;
                 return (
                   <div
                     key={module.manifest.id}

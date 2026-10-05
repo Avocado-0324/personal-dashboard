@@ -226,6 +226,7 @@ export async function loadPortfolioData(): Promise<PortfolioData | null> {
     pnlJpy: pnl.toFixed(0),
     pnlRatio: pnlRatio ? pnlRatio.toFixed(4) : null,
     xirr: xirr ? xirr.toFixed(4) : null,
+    missingFxCount,
     allocationByAccount,
     allocationByAssetClass,
     topHoldings,
