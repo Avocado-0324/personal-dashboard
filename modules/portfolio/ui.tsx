@@ -97,12 +97,12 @@ export function PortfolioCard({
             )}
           </div>
         </div>
-        <div className="flex gap-3 text-sm">
+        <div className="flex gap-2 text-sm whitespace-nowrap">
           <Link href="/portfolio" className="text-accent hover:opacity-80">
-            ＋ 录入
+            ＋录入
           </Link>
           <Link href="/portfolio" className="text-accent hover:opacity-80">
-            明细 →
+            明细
           </Link>
         </div>
       </div>

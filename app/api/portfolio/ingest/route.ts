@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { getDb, isDatabaseConfigured } from '@/db/client';
+import { getPoolDb, isDatabaseConfigured } from '@/db/client';
 import { importBatches, snapshots, accounts, instruments, positions, cashBalances, cashFlows } from '@/db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, and } from 'drizzle-orm';
 import { timingSafeEqual } from 'crypto';
 
 export const dynamic = 'force-dynamic';
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const data = IngestSchema.parse(body);
 
-    const db = getDb();
+    const db = getPoolDb();
 
     // 检查 idempotency key
     const existingBatches = await db
@@ -105,8 +105,7 @@ export async function POST(request: NextRequest) {
     
     const existingBatch = existingBatches[0];
 
-    if (existingBatch) {
-      // 返回之前的结果
+    if (existingBatch && existingBatch.status === 'committed') {
       return NextResponse.json(
         {
           batchId: existingBatch.id,
@@ -124,192 +123,198 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 创建批次
-    const [batch] = await db
-      .insert(importBatches)
-      .values({
-        source: 'screenshot',
-        idempotencyKey: data.idempotencyKey,
-        status: 'committed',
-      })
-      .returning();
-
-    // 创建快照
-    const [snapshot] = await db
-      .insert(snapshots)
-      .values({
-        asOf: data.asOf,
-        source: 'screenshot',
-        batchId: batch.id,
-      })
-      .returning();
-
     let positionsInserted = 0;
     let cashFlowsInserted = 0;
+    let batchId: string;
 
-    // 创建账户（如果提供）
-    const accountMap = new Map<string, string>();
-    if (data.accounts) {
-      for (const acc of data.accounts) {
-        const [account] = await db
-          .insert(accounts)
-          .values(acc)
-          .returning();
-        accountMap.set(acc.name, account.id);
-      }
-    }
+    // 在事务中执行所有操作
+    await db.transaction(async (tx) => {
+      // 创建批次
+      const [batch] = await tx
+        .insert(importBatches)
+        .values({
+          source: 'screenshot',
+          idempotencyKey: data.idempotencyKey,
+          status: 'committed',
+        })
+        .returning();
 
-    // 插入持仓
-    if (data.positions) {
-      for (const pos of data.positions) {
-        // 获取或创建账户
-        let accountId = accountMap.get(pos.accountName);
-        if (!accountId) {
-          const existingAccounts = await db
-            .select()
-            .from(accounts)
-            .where(eq(accounts.name, pos.accountName))
-            .limit(1);
-          
-          if (existingAccounts.length > 0) {
-            accountId = existingAccounts[0].id;
-          } else {
-            const [newAccount] = await db
-              .insert(accounts)
-              .values({
-                name: pos.accountName,
-                type: 'other',
-              })
-              .returning();
-            accountId = newAccount.id;
-            accountMap.set(pos.accountName, accountId);
-          }
-        }
+      batchId = batch.id;
 
-        // 获取或创建 instrument
-        const existingInstruments = await db
-          .select()
-          .from(instruments)
-          .where((t) => {
-            // 使用 SQL 条件
-            return sql`${t.symbol} = ${pos.symbol} AND ${t.currency} = ${pos.currency}`;
-          })
-          .limit(1);
-        
-        let instrument = existingInstruments[0];
+      // 创建快照
+      const [snapshot] = await tx
+        .insert(snapshots)
+        .values({
+          asOf: data.asOf,
+          source: 'screenshot',
+          batchId: batch.id,
+        })
+        .returning();
 
-        if (!instrument) {
-          [instrument] = await db
-            .insert(instruments)
-            .values({
-              symbol: pos.symbol,
-              name: pos.name,
-              assetClass: pos.assetClass,
-              currency: pos.currency,
-              unitBasis: pos.unitBasis || '1',
-            })
+      // 创建账户（如果提供）
+      const accountMap = new Map<string, string>();
+      if (data.accounts) {
+        for (const acc of data.accounts) {
+          const [account] = await tx
+            .insert(accounts)
+            .values(acc)
             .returning();
+          accountMap.set(acc.name, account.id);
         }
-
-        await db.insert(positions).values({
-          snapshotId: snapshot.id,
-          accountId,
-          instrumentId: instrument.id,
-          quantity: pos.quantity,
-          avgCost: pos.avgCost,
-          price: pos.price,
-          fxRateToJpy: pos.currency === 'JPY' 
-            ? (pos.fxRateToJpy && pos.fxRateToJpy !== '' ? pos.fxRateToJpy : '1')
-            : (pos.fxRateToJpy && pos.fxRateToJpy !== '' ? pos.fxRateToJpy : null),
-        });
-
-        positionsInserted++;
       }
-    }
 
-    // 插入现金余额
-    if (data.cashBalances) {
-      for (const cash of data.cashBalances) {
-        let accountId = accountMap.get(cash.accountName);
-        if (!accountId) {
-          const existingAccounts = await db
-            .select()
-            .from(accounts)
-            .where(eq(accounts.name, cash.accountName))
-            .limit(1);
-          
-          if (existingAccounts.length > 0) {
-            accountId = existingAccounts[0].id;
-          } else {
-            const [newAccount] = await db
-              .insert(accounts)
-              .values({
-                name: cash.accountName,
-                type: 'cash',
-              })
-              .returning();
-            accountId = newAccount.id;
-            accountMap.set(cash.accountName, accountId);
-          }
-        }
-
-        await db.insert(cashBalances).values({
-          snapshotId: snapshot.id,
-          accountId,
-          currency: cash.currency,
-          amount: cash.amount,
-          fxRateToJpy: cash.fxRateToJpy && cash.fxRateToJpy !== ''
-            ? cash.fxRateToJpy
-            : (cash.currency === 'JPY' ? '1' : null),
-        });
-      }
-    }
-
-    // 插入现金流
-    if (data.cashFlows) {
-      for (const flow of data.cashFlows) {
-        let accountId: string | null = null;
-        
-        if (flow.accountName) {
-          accountId = accountMap.get(flow.accountName) || null;
+      // 插入持仓
+      if (data.positions) {
+        for (const pos of data.positions) {
+          // 获取或创建账户
+          let accountId = accountMap.get(pos.accountName);
           if (!accountId) {
-            const existingAccounts = await db
+            const existingAccounts = await tx
               .select()
               .from(accounts)
-              .where(eq(accounts.name, flow.accountName))
+              .where(eq(accounts.name, pos.accountName))
               .limit(1);
             
             if (existingAccounts.length > 0) {
               accountId = existingAccounts[0].id;
+            } else {
+              const [newAccount] = await tx
+                .insert(accounts)
+                .values({
+                  name: pos.accountName,
+                  type: 'other',
+                })
+                .returning();
+              accountId = newAccount.id;
+              accountMap.set(pos.accountName, accountId);
             }
           }
+
+          // 获取或创建 instrument（按 symbol + currency）
+          const existingInstruments = await tx
+            .select()
+            .from(instruments)
+            .where(and(
+              eq(instruments.symbol, pos.symbol),
+              eq(instruments.currency, pos.currency)
+            ))
+            .limit(1);
+          
+          let instrument = existingInstruments[0];
+
+          if (!instrument) {
+            [instrument] = await tx
+              .insert(instruments)
+              .values({
+                symbol: pos.symbol,
+                name: pos.name,
+                assetClass: pos.assetClass,
+                currency: pos.currency,
+                unitBasis: pos.unitBasis || (pos.assetClass === 'fund' ? '10000' : '1'),
+              })
+              .returning();
+          }
+
+          await tx.insert(positions).values({
+            snapshotId: snapshot.id,
+            accountId,
+            instrumentId: instrument.id,
+            quantity: pos.quantity,
+            avgCost: pos.avgCost,
+            price: pos.price,
+            fxRateToJpy: pos.currency === 'JPY' 
+              ? (pos.fxRateToJpy && pos.fxRateToJpy !== '' ? pos.fxRateToJpy : '1')
+              : (pos.fxRateToJpy && pos.fxRateToJpy !== '' ? pos.fxRateToJpy : null),
+          });
+
+          positionsInserted++;
         }
-
-        await db.insert(cashFlows).values({
-          accountId,
-          date: flow.date,
-          direction: flow.direction,
-          amountJpy: flow.amountJpy,
-          note: flow.note,
-          source: 'screenshot',
-          batchId: batch.id,
-        });
-
-        cashFlowsInserted++;
       }
-    }
 
-    // 更新批次的行数
-    await db
-      .update(importBatches)
-      .set({
-        rowCount: positionsInserted + cashFlowsInserted,
-      })
-      .where(eq(importBatches.id, batch.id));
+      // 插入现金余额
+      if (data.cashBalances) {
+        for (const cash of data.cashBalances) {
+          let accountId = accountMap.get(cash.accountName);
+          if (!accountId) {
+            const existingAccounts = await tx
+              .select()
+              .from(accounts)
+              .where(eq(accounts.name, cash.accountName))
+              .limit(1);
+            
+            if (existingAccounts.length > 0) {
+              accountId = existingAccounts[0].id;
+            } else {
+              const [newAccount] = await tx
+                .insert(accounts)
+                .values({
+                  name: cash.accountName,
+                  type: 'cash',
+                })
+                .returning();
+              accountId = newAccount.id;
+              accountMap.set(cash.accountName, accountId);
+            }
+          }
+
+          await tx.insert(cashBalances).values({
+            snapshotId: snapshot.id,
+            accountId,
+            currency: cash.currency,
+            amount: cash.amount,
+            fxRateToJpy: cash.fxRateToJpy && cash.fxRateToJpy !== ''
+              ? cash.fxRateToJpy
+              : (cash.currency === 'JPY' ? '1' : null),
+          });
+        }
+      }
+
+      // 插入现金流
+      if (data.cashFlows) {
+        for (const flow of data.cashFlows) {
+          let accountId: string | null = null;
+          
+          if (flow.accountName) {
+            accountId = accountMap.get(flow.accountName) || null;
+            if (!accountId) {
+              const existingAccounts = await tx
+                .select()
+                .from(accounts)
+                .where(eq(accounts.name, flow.accountName))
+                .limit(1);
+              
+              if (existingAccounts.length > 0) {
+                accountId = existingAccounts[0].id;
+              }
+            }
+          }
+
+          await tx.insert(cashFlows).values({
+            accountId,
+            date: flow.date,
+            direction: flow.direction,
+            amountJpy: flow.amountJpy,
+            note: flow.note,
+            source: 'screenshot',
+            batchId: batch.id,
+          });
+
+          cashFlowsInserted++;
+        }
+      }
+
+      // 更新批次的行数
+      await tx
+        .update(importBatches)
+        .set({
+          rowCount: positionsInserted + cashFlowsInserted,
+        })
+        .where(eq(importBatches.id, batch.id));
+    });
 
     return NextResponse.json(
       {
-        batchId: batch.id,
+        batchId: batchId!,
         inserted: {
           positions: positionsInserted,
           cashFlows: cashFlowsInserted,

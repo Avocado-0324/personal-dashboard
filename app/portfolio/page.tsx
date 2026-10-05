@@ -293,19 +293,40 @@ export default function PortfolioPage() {
   }
 
   if (error) {
+    const isDatabaseUnconfigured = error === '数据库未配置';
+    
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-down text-lg mb-4">{error}</p>
-          <button
-            onClick={() => {
-              setLoading(true);
-              loadData();
-            }}
-            className="px-6 py-3 bg-accent text-background rounded-lg hover:opacity-90 transition"
-          >
-            重试
-          </button>
+      <div className="min-h-screen bg-background">
+        {/* 顶栏 */}
+        <header className="border-b border-card-border">
+          <div className="max-w-7xl mx-auto px-4 py-4 flex items-center gap-4">
+            <Link href="/" className="text-muted hover:text-foreground">
+              ← 返回首页
+            </Link>
+            <h1 className="text-xl font-bold text-foreground">持仓管理</h1>
+          </div>
+        </header>
+
+        <div className="flex items-center justify-center py-20">
+          <div className="text-center max-w-md">
+            <p className="text-down text-lg mb-4">{error}</p>
+            {isDatabaseUnconfigured ? (
+              <p className="text-sm text-muted">
+                请在环境变量中配置 DATABASE_URL
+              </p>
+            ) : (
+              <button
+                onClick={() => {
+                  setLoading(true);
+                  setError(null);
+                  loadData();
+                }}
+                className="px-6 py-3 bg-accent text-background rounded-lg hover:opacity-90 transition"
+              >
+                重试
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );

@@ -1,12 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb, isDatabaseConfigured } from '@/db/client';
+import { getPoolDb, isDatabaseConfigured } from '@/db/client';
 import { accounts, snapshots, instruments, positions, cashBalances, importBatches } from '@/db/schema';
 import { decodeShiftJIS, parseSBIPositions, type CSVError } from '@/modules/portfolio/import/sbi';
-import { eq } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
+import { createHash } from 'crypto';
 
 export const dynamic = 'force-dynamic';
 
 const MAX_FILE_SIZE = 1024 * 1024; // 1MB
+
+function inferAssetClassAndUnitBasis(symbol: string, name: string, currency: string): { 
+  assetClass: 'jp_stock' | 'us_stock' | 'fund' | 'etf' | 'bond' | 'reit' | 'crypto' | 'other'; 
+  unitBasis: string;
+} {
+  const nameUpper = name.toUpperCase();
+  const symbolUpper = symbol.toUpperCase();
+  
+  if (
+    nameUpper.includes('ファンド') || 
+    nameUpper.includes('投信') ||
+    nameUpper.includes('FUND') ||
+    symbol.length > 6 ||
+    /^[A-Z]{2}\d{6}$/.test(symbol)
+  ) {
+    return { assetClass: 'fund', unitBasis: '10000' };
+  }
+  
+  if (currency === 'USD' || currency === 'HKD') {
+    return { assetClass: 'us_stock', unitBasis: '1' };
+  }
+  
+  return { assetClass: 'jp_stock', unitBasis: '1' };
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -48,7 +73,15 @@ export async function POST(request: NextRequest) {
 
     // Shift_JIS 解码
     const buffer = await file.arrayBuffer();
+    const fileBuffer = Buffer.from(buffer);
     const csvText = decodeShiftJIS(buffer);
+    
+    // 计算确定性幂等键
+    const idempotencyKey = createHash('sha256')
+      .update(fileBuffer)
+      .update(asOf)
+      .update(accountName)
+      .digest('hex');
 
     // 解析
     const { positions: parsedPositions, errors } = parseSBIPositions(csvText);
@@ -80,8 +113,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 写入（事务）
-    const db = getDb();
+    // 检查幂等键
+    const db = getPoolDb();
+    
+    const existingBatches = await db
+      .select()
+      .from(importBatches)
+      .where(eq(importBatches.idempotencyKey, idempotencyKey))
+      .limit(1);
+    
+    if (existingBatches.length > 0 && existingBatches[0].status === 'committed') {
+      return NextResponse.json(
+        {
+          imported: existingBatches[0].rowCount || 0,
+          errors: [],
+          skipped: 0,
+          message: '文件已导入（幂等）',
+        },
+        { headers: { 'Cache-Control': 'no-store' } }
+      );
+    }
 
     try {
       // 事务开始
@@ -112,7 +163,7 @@ export async function POST(request: NextRequest) {
           .insert(importBatches)
           .values({
             source: 'csv',
-            idempotencyKey: `csv-${Date.now()}-${Math.random()}`,
+            idempotencyKey,
             filename: file.name,
             rowCount: parsedPositions.length,
             status: 'committed',
@@ -131,23 +182,32 @@ export async function POST(request: NextRequest) {
 
         // 写入各持仓
         for (const pos of parsedPositions) {
-          // 获取或创建 Instrument
+          // 获取或创建 Instrument（按 symbol + currency）
           let instrumentRecords = await tx
             .select()
             .from(instruments)
-            .where(eq(instruments.symbol, pos.symbol))
+            .where(and(
+              eq(instruments.symbol, pos.symbol),
+              eq(instruments.currency, pos.currency)
+            ))
             .limit(1);
 
           let instrumentId: string;
           if (instrumentRecords.length === 0) {
+            const { assetClass, unitBasis } = inferAssetClassAndUnitBasis(
+              pos.symbol,
+              pos.name,
+              pos.currency
+            );
+            
             const [newInstrument] = await tx
               .insert(instruments)
               .values({
                 symbol: pos.symbol,
                 name: pos.name,
-                assetClass: 'jp_stock',
+                assetClass,
                 currency: pos.currency,
-                unitBasis: '1',
+                unitBasis,
               })
               .returning();
             instrumentId = newInstrument.id;
