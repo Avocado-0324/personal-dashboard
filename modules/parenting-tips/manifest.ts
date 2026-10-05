@@ -8,5 +8,5 @@ export const manifest: ModuleManifest = {
   defaultEnabled: true,
   requires: [],
   configKeys: ['parenting.ageBand', 'parenting.themes'],
-  layout: { column: 'right', priority: 20 },
+  layout: { column: 'right', priority: 20, mobileOrder: 30 },
 };

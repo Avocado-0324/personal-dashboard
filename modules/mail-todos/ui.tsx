@@ -54,7 +54,7 @@ export function Card({ result, onRefresh }: Props) {
           <a
             href="/settings"
             className="inline-block px-6 py-2 bg-accent text-background rounded-lg
-                       hover:opacity-90 transition font-medium"
+                       hover:opacity-90 transition font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             去连接
           </a>
@@ -99,7 +99,7 @@ export function Card({ result, onRefresh }: Props) {
           <button
             onClick={onRefresh}
             className="px-4 py-2 bg-accent text-background rounded-lg
-                       hover:opacity-90 transition font-medium"
+                       hover:opacity-90 transition font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             重试
           </button>
@@ -152,7 +152,7 @@ export function Card({ result, onRefresh }: Props) {
           href="https://mail.google.com/mail/u/0/#inbox"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[13px] font-medium text-accent hover:underline"
+          className="text-[13px] font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           打开 Gmail ↗
         </a>
@@ -166,6 +166,7 @@ export function Card({ result, onRefresh }: Props) {
             target="_blank"
             rel="noopener noreferrer"
             className={`flex gap-3 py-3 px-1 hover:bg-tile/50 transition -mx-1 rounded
+                        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent
                         ${idx < data.items.length - 1 ? 'border-b border-card-border' : ''}`}
           >
             <div className={`w-[34px] h-[34px] rounded-full flex-none

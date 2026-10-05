@@ -70,3 +70,15 @@ body {
     text-shadow: 0 0 24px rgba(163, 230, 53, 0.12);
   }
 }
+
+/* 全局焦点环样式 */
+a:focus-visible,
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}

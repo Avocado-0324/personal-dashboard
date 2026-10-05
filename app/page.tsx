@@ -55,14 +55,18 @@ export default async function HomePage() {
     .filter(m => m.manifest.layout.column === 'right')
     .sort((a, b) => a.manifest.layout.priority - b.manifest.layout.priority);
 
+  const mobileModules = modules
+    .slice()
+    .sort((a, b) => a.manifest.layout.mobileOrder - b.manifest.layout.mobileOrder);
+
   const now = new Date();
   const hour = now.getHours();
   const greeting = hour < 12 ? '上午好' : hour < 18 ? '下午好' : '晚上好';
   const dateStr = now.toLocaleDateString('zh-CN', { 
-    month: 'numeric', 
+    month: 'long', 
     day: 'numeric', 
     weekday: 'long' 
-  });
+  }).replace(/(\d+)月/, '$1月 ');
 
   const mailModule = modules.find(m => m.id === 'mail-todos');
   const githubModule = modules.find(m => m.id === 'github-activity');
@@ -85,19 +89,23 @@ export default async function HomePage() {
       <div className="max-w-[1200px] mx-auto px-8 py-7">
         {/* 顶部导航 */}
         <nav className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 whitespace-nowrap">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent via-up to-[#f472b6]" />
             <h1 className="text-[17px] font-bold">我的聚合</h1>
           </div>
-          <div className="flex items-center gap-3">
-            <ThemeToggle />
+          <div className="flex items-center gap-2 md:gap-3">
+            <div className="hidden md:block">
+              <ThemeToggle />
+            </div>
+            <ThemeToggle className="md:hidden" iconOnly />
             <Link
               href="/settings"
-              className="px-4 py-2 rounded-full text-sm font-medium
+              className="px-3 md:px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap
                          bg-card-bg border border-card-border text-foreground
-                         hover:bg-tile transition-colors"
+                         hover:bg-tile transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
-              ⚙ 设置
+              <span className="hidden md:inline">⚙ 设置</span>
+              <span className="md:hidden">⚙</span>
             </Link>
             <div className="w-9 h-9 rounded-full bg-foreground text-background
                             flex items-center justify-center font-bold text-sm">
@@ -143,7 +151,7 @@ export default async function HomePage() {
         ) : (
           <>
             {/* 两栏布局（桌面） / 单栏（移动） */}
-            <div className="grid grid-cols-1 lg:grid-cols-[1.35fr_1fr] gap-5">
+            <div className="hidden lg:grid lg:grid-cols-[1.35fr_1fr] gap-5">
               {/* 左栏 */}
               <div className="flex flex-col gap-5">
                 {leftModules.map((module) => (
@@ -167,6 +175,18 @@ export default async function HomePage() {
                   />
                 ))}
               </div>
+            </div>
+
+            {/* 手机端单栏：按 mobileOrder 排序 */}
+            <div className="lg:hidden flex flex-col gap-5">
+              {mobileModules.map((module) => (
+                <ModuleCard
+                  key={module.id}
+                  moduleId={module.id}
+                  initialResult={module.result}
+                  Card={module.Card}
+                />
+              ))}
             </div>
 
             {/* 页脚 */}

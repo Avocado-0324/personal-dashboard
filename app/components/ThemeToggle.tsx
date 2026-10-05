@@ -2,7 +2,7 @@
 
 import { useTheme } from '@/lib/theme-context';
 
-export function ThemeToggle() {
+export function ThemeToggle({ className = '', iconOnly = false }: { className?: string; iconOnly?: boolean }) {
   const { theme, setTheme } = useTheme();
 
   const themes = [
@@ -11,8 +11,35 @@ export function ThemeToggle() {
     { value: 'system' as const, label: '系统', icon: '◑' },
   ];
 
+  const currentTheme = themes.find(t => t.value === theme) || themes[0];
+
+  if (iconOnly) {
+    return (
+      <div className={`relative inline-block ${className}`}>
+        <select
+          value={theme}
+          onChange={(e) => setTheme(e.target.value as any)}
+          className="appearance-none w-9 h-9 rounded-full text-center
+                     bg-card-bg border border-card-border text-foreground
+                     hover:bg-tile transition-colors cursor-pointer
+                     focus:outline-none focus:ring-2 focus:ring-accent"
+          aria-label="切换主题"
+        >
+          {themes.map((t) => (
+            <option key={t.value} value={t.value}>
+              {t.icon}
+            </option>
+          ))}
+        </select>
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+          {currentTheme.icon}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="relative inline-block">
+    <div className={`relative inline-block ${className}`}>
       <select
         value={theme}
         onChange={(e) => setTheme(e.target.value as any)}

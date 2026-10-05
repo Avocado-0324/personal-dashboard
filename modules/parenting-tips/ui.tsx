@@ -44,7 +44,7 @@ export function Card({ result, onRefresh }: Props) {
           <button
             onClick={onRefresh}
             className="px-4 py-2 bg-accent text-background rounded-lg
-                       hover:opacity-90 transition font-medium"
+                       hover:opacity-90 transition font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             重试
           </button>
@@ -92,7 +92,7 @@ export function Card({ result, onRefresh }: Props) {
         </div>
         <button
           onClick={onRefresh}
-          className="text-[13px] font-medium text-accent hover:underline"
+          className="text-[13px] font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           换一批
         </button>

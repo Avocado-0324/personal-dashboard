@@ -8,5 +8,5 @@ export const manifest: ModuleManifest = {
   defaultEnabled: true,
   requires: ['github'],
   configKeys: [],
-  layout: { column: 'left', priority: 20 },
+  layout: { column: 'left', priority: 20, mobileOrder: 40 },
 };

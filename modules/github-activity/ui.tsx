@@ -55,7 +55,7 @@ export function Card({ result, onRefresh }: Props) {
           <a
             href="/settings"
             className="inline-block px-6 py-2 bg-accent text-background rounded-lg
-                       hover:opacity-90 transition font-medium"
+                       hover:opacity-90 transition font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             去连接
           </a>
@@ -100,7 +100,7 @@ export function Card({ result, onRefresh }: Props) {
           <button
             onClick={onRefresh}
             className="px-4 py-2 bg-accent text-background rounded-lg
-                       hover:opacity-90 transition font-medium"
+                       hover:opacity-90 transition font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             重试
           </button>
@@ -156,7 +156,7 @@ export function Card({ result, onRefresh }: Props) {
         </div>
         <button
           onClick={onRefresh}
-          className="text-[13px] font-medium text-accent hover:underline"
+          className="text-[13px] font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           刷新
         </button>
@@ -195,6 +195,7 @@ export function Card({ result, onRefresh }: Props) {
             target="_blank"
             rel="noopener noreferrer"
             className={`flex justify-between py-2 px-0 hover:text-accent transition
+                        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded
                         ${idx === 0 ? 'border-b border-card-border' : ''}`}
           >
             <span className="text-[13px] truncate flex-1">
