@@ -52,19 +52,18 @@ export default function PortfolioPage() {
   const [error, setError] = useState<string | null>(null);
   const [moduleEnabled, setModuleEnabled] = useState(true);
   
-  // 消息提示状态
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [importWarning, setImportWarning] = useState<{ message: string; batchId: string } | null>(null);
   
-  // 撤销确认状态
   const [revertConfirm, setRevertConfirm] = useState<string | null>(null);
   
-  // 补汇率状态
-  const [editingFxRate, setEditingFxRate] = useState<{ positionIndex: number; currency: string } | null>(null);
+  const [editingFxRate, setEditingFxRate] = useState<{ snapshotId: string; currency: string } | null>(null);
   const [fxRateInput, setFxRateInput] = useState('');
+  const [fxRateSaving, setFxRateSaving] = useState(false);
+  const [fxRateValidationError, setFxRateValidationError] = useState<string | null>(null);
+  const [fxRateSuccess, setFxRateSuccess] = useState<{ currency: string; count: number } | null>(null);
   
-  // 手动录入表单状态
   const [showNewAccountForm, setShowNewAccountForm] = useState(false);
   const [showNewCashFlowForm, setShowNewCashFlowForm] = useState(false);
   const [newAccount, setNewAccount] = useState({ name: '', type: 'tokutei' });
@@ -76,7 +75,6 @@ export default function PortfolioPage() {
     note: '',
   });
 
-  // CSV 导入状态
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [csvAccountName, setCsvAccountName] = useState('');
   const [csvAsOf, setCsvAsOf] = useState(new Date().toISOString().split('T')[0]);
@@ -285,36 +283,44 @@ export default function PortfolioPage() {
     }
   }
 
-  async function handleSaveFxRate(positionIndex: number) {
-    if (!data?.positions[positionIndex]) return;
+  async function handleSaveFxRate() {
+    if (!editingFxRate || !data?.snapshots || data.snapshots.length === 0) return;
+
+    const rate = parseFloat(fxRateInput);
     
-    const pos = data.positions[positionIndex];
-    const fxRate = parseFloat(fxRateInput);
-    
-    if (isNaN(fxRate) || fxRate <= 0) {
-      setErrorMessage('请输入有效的汇率');
+    if (!fxRateInput || isNaN(rate) || rate <= 0) {
+      setFxRateValidationError('请输入大于 0 的汇率');
       return;
     }
 
+    setFxRateValidationError(null);
+    setFxRateSaving(true);
+
     try {
-      const res = await fetch(`/api/portfolio/positions/${pos.position.id}/fx-rate`, {
+      const res = await fetch(`/api/portfolio/snapshots/${editingFxRate.snapshotId}/fx`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fxRateToJpy: fxRate.toString() }),
+        body: JSON.stringify({ 
+          currency: editingFxRate.currency, 
+          rateToJpy: fxRateInput 
+        }),
       });
 
+      const json = await res.json();
+      
       if (res.ok) {
-        setSuccessMessage('汇率已更新');
+        setFxRateSuccess({ currency: editingFxRate.currency, count: json.updatedCount });
         setEditingFxRate(null);
         setFxRateInput('');
         loadData();
       } else {
-        const json = await res.json();
         setErrorMessage(`更新失败：${json.error || '未知错误'}`);
       }
     } catch (error) {
       console.error('Failed to update FX rate:', error);
       setErrorMessage('更新汇率失败');
+    } finally {
+      setFxRateSaving(false);
     }
   }
 
@@ -381,7 +387,6 @@ export default function PortfolioPage() {
     );
   }
 
-  // 计算KPI
   let totalValue = new Decimal(0);
   let totalCash = new Decimal(0);
   let missingFxCount = 0;
@@ -451,6 +456,8 @@ export default function PortfolioPage() {
     xirr = calculateXIRR(flows);
   }
 
+  const latestSnapshotId = data?.snapshots && data.snapshots.length > 0 ? data.snapshots[0].id : null;
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-card-border">
@@ -470,7 +477,6 @@ export default function PortfolioPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-8">
-        {/* 消息提示 */}
         {successMessage && (
           <div className="mb-4 p-4 bg-lime-500/10 border border-lime-500/20 rounded-lg flex justify-between items-center">
             <p className="text-lime-400">{successMessage}</p>
@@ -484,6 +490,15 @@ export default function PortfolioPage() {
           <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex justify-between items-center">
             <p className="text-red-400">{errorMessage}</p>
             <button onClick={() => setErrorMessage(null)} className="text-red-400 hover:opacity-80">
+              ✕
+            </button>
+          </div>
+        )}
+
+        {fxRateSuccess && (
+          <div className="mb-4 p-4 bg-lime-500/10 border border-lime-500/20 rounded-lg flex justify-between items-center">
+            <p className="text-lime-400">已更新 {fxRateSuccess.count} 条 {fxRateSuccess.currency} 记录</p>
+            <button onClick={() => setFxRateSuccess(null)} className="text-lime-400 hover:opacity-80">
               ✕
             </button>
           </div>
@@ -512,7 +527,6 @@ export default function PortfolioPage() {
           </div>
         )}
 
-        {/* KPI 卡片 */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <div className="rounded-card bg-card-bg border border-card-border p-4">
             <div className="flex items-center justify-between">
@@ -549,7 +563,6 @@ export default function PortfolioPage() {
           </div>
         </div>
 
-        {/* Tab 导航 */}
         <div className="mb-6 flex gap-4 border-b border-card-border">
           <button
             onClick={() => setActiveTab('positions')}
@@ -594,7 +607,6 @@ export default function PortfolioPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* 主内容 */}
           <div className="lg:col-span-2">
             <div className="rounded-card bg-card-bg border border-card-border p-6">
               {activeTab === 'positions' && (
@@ -625,7 +637,7 @@ export default function PortfolioPage() {
                               marketValue = '¥' + value.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
                             }
                             
-                            const isEditing = editingFxRate?.positionIndex === i;
+                            const isEditing = editingFxRate?.currency === pos.instrument.currency;
                             
                             return (
                               <tr key={i} className="border-b border-card-border">
@@ -641,46 +653,62 @@ export default function PortfolioPage() {
                                   {fxRateRaw ? (
                                     <span className="font-mono text-foreground">{marketValue}</span>
                                   ) : isEditing ? (
-                                    <div className="flex items-center justify-end gap-2">
-                                      <span className="text-xs text-muted">1 {pos.instrument.currency} =</span>
-                                      <input
-                                        type="number"
-                                        step="0.01"
-                                        value={fxRateInput}
-                                        onChange={(e) => setFxRateInput(e.target.value)}
-                                        placeholder="0.00"
-                                        className="w-20 px-2 py-1 text-xs bg-card-bg border border-card-border rounded text-foreground"
-                                        autoFocus
-                                      />
-                                      <span className="text-xs text-muted">JPY</span>
-                                      <button
-                                        onClick={() => handleSaveFxRate(i)}
-                                        className="text-xs px-2 py-1 bg-accent text-background rounded hover:opacity-80"
-                                      >
-                                        保存
-                                      </button>
-                                      <button
-                                        onClick={() => {
-                                          setEditingFxRate(null);
-                                          setFxRateInput('');
-                                        }}
-                                        className="text-xs px-2 py-1 bg-tile text-muted rounded hover:bg-card-border"
-                                      >
-                                        取消
-                                      </button>
+                                    <div className="flex flex-col items-end gap-2">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs text-muted">1 {pos.instrument.currency} =</span>
+                                        <input
+                                          type="number"
+                                          step="0.01"
+                                          value={fxRateInput}
+                                          onChange={(e) => {
+                                            setFxRateInput(e.target.value);
+                                            setFxRateValidationError(null);
+                                          }}
+                                          placeholder="0.00"
+                                          className="w-20 px-2 py-1 text-xs bg-card-bg border border-card-border rounded text-foreground"
+                                          autoFocus
+                                          disabled={fxRateSaving}
+                                        />
+                                        <span className="text-xs text-muted">JPY</span>
+                                        <button
+                                          onClick={handleSaveFxRate}
+                                          disabled={fxRateSaving}
+                                          className="text-xs px-2 py-1 bg-accent text-background rounded hover:opacity-80 disabled:opacity-50"
+                                        >
+                                          {fxRateSaving ? '保存中…' : '保存'}
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            setEditingFxRate(null);
+                                            setFxRateInput('');
+                                            setFxRateValidationError(null);
+                                          }}
+                                          disabled={fxRateSaving}
+                                          className="text-xs px-2 py-1 bg-tile text-muted rounded hover:bg-card-border disabled:opacity-50"
+                                        >
+                                          取消
+                                        </button>
+                                      </div>
+                                      {fxRateValidationError && (
+                                        <p className="text-xs text-red-400">{fxRateValidationError}</p>
+                                      )}
+                                      <p className="text-xs text-muted">将用于本快照所有 {pos.instrument.currency} 持仓和现金</p>
                                     </div>
                                   ) : (
                                     <div className="flex items-center justify-end gap-2 text-amber-500">
                                       <span>缺少汇率，未计入总资产</span>
-                                      <button
-                                        onClick={() => {
-                                          setEditingFxRate({ positionIndex: i, currency: pos.instrument.currency });
-                                          setFxRateInput('');
-                                        }}
-                                        className="text-xs px-2 py-1 bg-accent text-background rounded hover:opacity-80 whitespace-nowrap"
-                                      >
-                                        补汇率
-                                      </button>
+                                      {latestSnapshotId && (
+                                        <button
+                                          onClick={() => {
+                                            setEditingFxRate({ snapshotId: latestSnapshotId, currency: pos.instrument.currency });
+                                            setFxRateInput('');
+                                            setFxRateValidationError(null);
+                                          }}
+                                          className="text-xs px-2 py-1 bg-accent text-background rounded hover:opacity-80 whitespace-nowrap"
+                                        >
+                                          补汇率
+                                        </button>
+                                      )}
                                     </div>
                                   )}
                                 </td>
@@ -890,12 +918,10 @@ export default function PortfolioPage() {
             </div>
           </div>
 
-          {/* 侧边栏 - 更新数据 */}
           <div className="space-y-6">
             <div className="rounded-card bg-card-bg border border-card-border p-6">
               <h3 className="text-lg font-semibold text-foreground mb-4">更新数据</h3>
               
-              {/* CSV 导入 */}
               <div className="mb-6">
                 <h4 className="text-sm font-medium text-foreground mb-3">CSV 导入</h4>
                 
@@ -964,7 +990,6 @@ export default function PortfolioPage() {
                 </div>
               </div>
 
-              {/* 截图说明 */}
               <div className="mb-6">
                 <h4 className="text-sm font-medium text-foreground mb-2">截图识别</h4>
                 <div className="bg-tile rounded-lg p-4 text-sm text-muted">
@@ -973,7 +998,6 @@ export default function PortfolioPage() {
                 </div>
               </div>
 
-              {/* 新增账户 */}
               <div>
                 <h4 className="text-sm font-medium text-foreground mb-2">新增账户</h4>
                 {showNewAccountForm ? (
