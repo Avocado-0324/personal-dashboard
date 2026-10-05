@@ -6,6 +6,7 @@ const DEFAULT_SETTINGS: UserSettings = {
     'mail-todos': { enabled: true },
     'parenting-tips': { enabled: true },
     'github-activity': { enabled: true },
+    'portfolio': { enabled: false },
   },
   config: {},
 };

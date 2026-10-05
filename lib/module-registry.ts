@@ -19,7 +19,12 @@ export function getAllModules(): ModuleContract[] {
 export function getEnabledModules(
   userSettings: { modules: Record<string, { enabled: boolean }> }
 ): ModuleContract[] {
-  return getAllModules().filter(
-    (module) => userSettings.modules[module.manifest.id]?.enabled !== false
-  );
+  return getAllModules().filter((module) => {
+    const userPref = userSettings.modules[module.manifest.id];
+    // 如果用户有设置，用用户设置；否则用 manifest.defaultEnabled
+    if (userPref !== undefined) {
+      return userPref.enabled;
+    }
+    return module.manifest.defaultEnabled;
+  });
 }

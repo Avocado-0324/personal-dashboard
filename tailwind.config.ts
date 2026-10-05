@@ -16,6 +16,7 @@ export default {
         accent: "var(--accent)",
         up: "var(--up)",
         down: "var(--down)",
+        warn: "var(--warn)",
         muted: "var(--muted)",
         'card-bg': "var(--card-bg)",
         'card-border': "var(--card-border)",

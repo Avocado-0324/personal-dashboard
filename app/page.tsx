@@ -7,6 +7,8 @@ import { ModuleCard } from './components/ModuleCard';
 import { getGmailStatus } from '@/lib/connectors/gmail';
 import { getGithubStatus } from '@/lib/connectors/github';
 import { ThemeToggle } from './components/ThemeToggle';
+import { loadSummary } from '@/modules/portfolio';
+import Decimal from 'decimal.js';
 
 initializeModules();
 
@@ -80,6 +82,18 @@ export default async function HomePage() {
                          githubModule.result.data.summary.reviews;
   }
 
+  // 获取持仓 summary（仅在模块开启时）
+  const portfolioModule = modules.find(m => m.id === 'portfolio');
+  const portfolioEnabled = !!portfolioModule; // 如果在 enabledModules 里，就是开启的
+  let portfolioSummary = null;
+  if (portfolioEnabled) {
+    try {
+      portfolioSummary = await loadSummary();
+    } catch {
+      // 静默失败
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-[1200px] mx-auto px-8 py-7">
@@ -112,7 +126,7 @@ export default async function HomePage() {
 
         {/* 概览区 Hero */}
         <div className="rounded-hero bg-gradient-to-br from-hero-from to-hero-to
-                        border border-card-border p-7 mb-5 flex justify-between items-end">
+                        border border-card-border p-7 mb-5 flex flex-col lg:flex-row justify-between lg:items-end gap-6">
           <div>
             <div className="text-muted text-sm mb-1">{dateStr}</div>
             <h2 className="text-[28px] font-bold mb-2 tracking-tight">{greeting}，Qinou</h2>
@@ -131,6 +145,43 @@ export default async function HomePage() {
               {!unreadCount && !githubActivityCount && '一切都很平静'}
             </div>
           </div>
+          
+          {portfolioSummary && (
+            <div className="flex gap-8 flex-wrap">
+              <div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-muted text-xs mb-1">总资产</div>
+                  {portfolioSummary.missingFxCount > 0 && (
+                    <div className="text-xs text-warn">有 {portfolioSummary.missingFxCount} 条未计入</div>
+                  )}
+                </div>
+                <div className="font-mono text-[24px] font-bold">
+                  ¥{formatNumberWithCommas(portfolioSummary.totalJpy)}
+                </div>
+              </div>
+              <div>
+                <div className="text-muted text-xs mb-1">累计盈亏</div>
+                <div className={`font-mono text-[24px] font-bold ${
+                  new Decimal(portfolioSummary.pnlJpy).gte(0) ? 'text-up' : 'text-down'
+                }`}>
+                  {new Decimal(portfolioSummary.pnlJpy).gte(0) ? '+' : ''}
+                  ¥{formatNumberWithCommas(portfolioSummary.pnlJpy)}
+                </div>
+              </div>
+              <div>
+                <div className="text-muted text-xs mb-1">年化 XIRR</div>
+                {portfolioSummary.xirr ? (
+                  <div className={`font-mono text-[24px] font-bold ${
+                    new Decimal(portfolioSummary.xirr).gte(0) ? 'text-up' : 'text-down'
+                  }`}>
+                    {new Decimal(portfolioSummary.xirr).times(100).toFixed(1)}%
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted">数据不足</div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {modules.length === 0 ? (
@@ -192,4 +243,9 @@ export default async function HomePage() {
       </div>
     </div>
   );
+}
+
+function formatNumberWithCommas(value: string): string {
+  const num = parseFloat(value);
+  return num.toLocaleString('ja-JP', { maximumFractionDigits: 0 });
 }

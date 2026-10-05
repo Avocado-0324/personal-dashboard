@@ -32,6 +32,14 @@ const allModulesConfig = [
       requires: ['github'],
     }
   },
+  {
+    manifest: {
+      id: 'portfolio' as const,
+      name: '持仓',
+      description: '资产持仓管理（敏感模块，默认关闭）',
+      requires: [],
+    }
+  },
 ];
 
 const ageBands = [
@@ -93,7 +101,9 @@ function SettingsContent() {
   }, []);
 
   const handleToggleModule = (moduleId: string) => {
-    const currentEnabled = (settings.modules as any)[moduleId]?.enabled !== false;
+    const userPref = (settings.modules as any)[moduleId];
+    const defaultEnabled = moduleId === 'portfolio' ? false : true;
+    const currentEnabled = userPref?.enabled ?? defaultEnabled;
     toggleModule(moduleId, !currentEnabled);
     setSettings(getUserSettings());
     setTimeout(() => router.refresh(), 100);
@@ -171,7 +181,9 @@ function SettingsContent() {
             <h2 className="text-lg font-bold mb-4">模块管理</h2>
             <div className="space-y-3">
               {allModulesConfig.map((module) => {
-                const enabled = settings.modules[module.manifest.id]?.enabled !== false;
+                const userPref = settings.modules[module.manifest.id];
+                const defaultEnabled = module.manifest.id === 'portfolio' ? false : true;
+                const enabled = userPref?.enabled ?? defaultEnabled;
                 return (
                   <div
                     key={module.manifest.id}
