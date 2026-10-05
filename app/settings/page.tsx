@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { getUserSettings, toggleModule, updateUserSettings } from '@/lib/user-settings';
-import { useRouter } from 'next/navigation';
-import { signIn, signOut } from 'next-auth/react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { signOut, signIn } from 'next-auth/react';
 
 const allModulesConfig = [
   {
@@ -33,14 +33,34 @@ const allModulesConfig = [
   },
 ];
 
-export default function SettingsPage() {
+const ageBands = [
+  { value: '0-6m', label: '0-6个月' },
+  { value: '6-12m', label: '6-12个月' },
+  { value: '1-2y', label: '1-2岁' },
+  { value: '2-3y', label: '2-3岁' },
+  { value: '3y+', label: '3岁以上' },
+];
+
+const themes = [
+  { value: 'sleep', label: '睡眠' },
+  { value: 'feeding', label: '喂养' },
+  { value: 'play', label: '玩耍' },
+  { value: 'health', label: '健康' },
+  { value: 'emotion', label: '情绪' },
+];
+
+function SettingsContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [settings, setSettings] = useState(getUserSettings());
   const [demoMode, setDemoMode] = useState<'normal' | 'disconnected' | 'empty'>('normal');
   const [gmailConnected, setGmailConnected] = useState(false);
   const [gmailEmail, setGmailEmail] = useState('');
   const [githubConnected, setGithubConnected] = useState(false);
   const [githubLogin, setGithubLogin] = useState('');
+  
+  const errorParam = searchParams.get('error');
+  const successParam = searchParams.get('success');
 
   useEffect(() => {
     const cookies = document.cookie.split(';');
@@ -100,39 +120,45 @@ export default function SettingsPage() {
     setTimeout(() => router.refresh(), 100);
   };
 
-  const ageBands = [
-    { value: '0-6m', label: '0-6个月' },
-    { value: '6-12m', label: '6-12个月' },
-    { value: '1-2y', label: '1-2岁' },
-    { value: '2-3y', label: '2-3岁' },
-    { value: '3y+', label: '3岁以上' },
-  ];
-
-  const themes = [
-    { value: 'sleep', label: '睡眠' },
-    { value: 'feeding', label: '喂养' },
-    { value: 'play', label: '玩耍' },
-    { value: 'health', label: '健康' },
-    { value: 'emotion', label: '情绪' },
-  ];
-
   return (
     <div className="min-h-screen bg-gray-100">
       {/* 顶栏 */}
       <header className="bg-white shadow-sm">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
           <h1 className="text-2xl font-bold text-gray-900">设置</h1>
-          <Link
-            href="/"
-            className="text-sm text-blue-600 hover:text-blue-800 px-4 py-2 rounded hover:bg-blue-50"
-          >
-            返回首页
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href="/"
+              className="text-sm text-blue-600 hover:text-blue-800 px-4 py-2 rounded hover:bg-blue-50"
+            >
+              返回首页
+            </Link>
+            <button
+              onClick={async () => {
+                await fetch('/api/github/disconnect', { method: 'POST' });
+                await signOut({ callbackUrl: '/auth/signin' });
+              }}
+              className="text-sm text-red-600 hover:text-red-800 px-4 py-2 rounded hover:bg-red-50"
+            >
+              登出
+            </button>
+          </div>
         </div>
       </header>
 
       {/* 主内容区 */}
       <main className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+        {/* 错误和成功消息 */}
+        {errorParam && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-red-800">{errorParam}</p>
+          </div>
+        )}
+        {successParam === 'github_connected' && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+            <p className="text-green-800">GitHub 已成功连接</p>
+          </div>
+        )}
         {/* 模块开关 */}
         <section className="bg-white rounded-lg shadow p-6">
           <h2 className="text-xl font-bold mb-4">模块管理</h2>
@@ -306,7 +332,7 @@ export default function SettingsPage() {
                   <button
                     onClick={async () => {
                       await fetch('/api/gmail/connect', { method: 'POST' });
-                      signIn('google', { callbackUrl: '/settings' });
+                      await signIn('google', { callbackUrl: '/settings' });
                     }}
                     className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
                   >
@@ -345,8 +371,7 @@ export default function SettingsPage() {
                 ) : (
                   <button
                     onClick={async () => {
-                      await fetch('/api/github/connect', { method: 'POST' });
-                      signIn('github', { callbackUrl: '/settings' });
+                      window.location.href = '/api/connect/github';
                     }}
                     className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
                   >
@@ -359,5 +384,17 @@ export default function SettingsPage() {
         </section>
       </main>
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-gray-600">加载中...</div>
+      </div>
+    }>
+      <SettingsContent />
+    </Suspense>
   );
 }

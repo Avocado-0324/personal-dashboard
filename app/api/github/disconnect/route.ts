@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 export async function POST() {
   const cookieStore = await cookies();
   
+  cookieStore.delete('pd_github_connection');
   cookieStore.set('pd_github_disconnected', '1', {
     path: '/',
     maxAge: 60 * 60 * 24 * 365,
