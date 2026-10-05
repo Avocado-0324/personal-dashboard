@@ -152,7 +152,7 @@ export default async function HomePage() {
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-muted text-xs mb-1">总资产</div>
                   {portfolioSummary.missingFxCount > 0 && (
-                    <div className="text-xs text-amber-500">有 {portfolioSummary.missingFxCount} 条未计入</div>
+                    <div className="text-xs text-warn">有 {portfolioSummary.missingFxCount} 条未计入</div>
                   )}
                 </div>
                 <div className="font-mono text-[24px] font-bold">
