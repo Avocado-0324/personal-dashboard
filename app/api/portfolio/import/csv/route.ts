@@ -1,38 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPoolDb, isDatabaseConfigured } from '@/db/client';
-import { accounts, snapshots, instruments, positions, cashBalances, importBatches } from '@/db/schema';
-import { decodeShiftJIS, parseSBIPositions, type CSVError } from '@/modules/portfolio/import/sbi';
-import { eq, and, sql } from 'drizzle-orm';
-import { createHash } from 'crypto';
+import { accounts, snapshots, instruments, positions, importBatches } from '@/db/schema';
+import { decodeShiftJIS, parseSBIHoldings, computeIdempotencyKey } from '@/modules/portfolio/import/sbi';
+import { eq, and, sql, inArray } from 'drizzle-orm';
 import { isUniqueViolation } from '@/db/utils';
 
 export const dynamic = 'force-dynamic';
 
 const MAX_FILE_SIZE = 1024 * 1024; // 1MB
 
-function inferAssetClassAndUnitBasis(symbol: string, name: string, currency: string): { 
-  assetClass: 'jp_stock' | 'us_stock' | 'fund' | 'etf' | 'bond' | 'reit' | 'crypto' | 'other'; 
-  unitBasis: string;
-} {
-  const nameUpper = name.toUpperCase();
-  const symbolUpper = symbol.toUpperCase();
-  
-  if (
-    nameUpper.includes('\u30d5\u30a1\u30f3\u30c9') || 
-    nameUpper.includes('\u6295\u4fe1') ||
-    nameUpper.includes('FUND') ||
-    symbol.length > 6 ||
-    /^[A-Z]{2}\d{6}$/.test(symbol)
-  ) {
-    return { assetClass: 'fund', unitBasis: '10000' };
-  }
-  
-  if (currency === 'USD' || currency === 'HKD') {
-    return { assetClass: 'us_stock', unitBasis: '1' };
-  }
-  
-  return { assetClass: 'jp_stock', unitBasis: '1' };
-}
+/**
+ * SBI CSV 导入 API
+ * 
+ * 导入语义：
+ * - 只写入/覆盖本次解析出的账户（由 parsedPositions 的 accountName 集合决定）
+ * - 文件中未出现的账户不受影响，保持原有持仓不变
+ */
 
 export async function POST(request: NextRequest) {
   try {
@@ -49,7 +32,6 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
     const asOf = formData.get('asOf') as string;
-    const accountName = formData.get('accountName') as string;
 
     if (!file) {
       return NextResponse.json(
@@ -65,9 +47,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!asOf || !accountName) {
+    if (!asOf) {
       return NextResponse.json(
-        { error: '需要 asOf 和 accountName' },
+        { error: '需要 asOf 日期' },
         { status: 400, headers: { 'Cache-Control': 'no-store' } }
       );
     }
@@ -77,27 +59,21 @@ export async function POST(request: NextRequest) {
     const fileBuffer = Buffer.from(buffer);
     const csvText = decodeShiftJIS(buffer);
     
-    // 计算确定性幂等键
-    const idempotencyKey = createHash('sha256')
-      .update(fileBuffer)
-      .update(asOf)
-      .update(accountName)
-      .digest('hex');
+    // 计算幂等键（不含 accountName）
+    const idempotencyKey = computeIdempotencyKey(fileBuffer, asOf);
 
     // 解析
-    const { positions: parsedPositions, errors } = parseSBIPositions(csvText);
+    const { positions: parsedPositions, errors, accountSummaries } = parseSBIHoldings(csvText);
 
     if (dryRun) {
-      // dry-run：仅预览
+      // dry-run：返回预览
       return NextResponse.json(
         {
-          preview: parsedPositions.map((p, i) => ({
-            row: i + 2, // 表头之后
-            symbol: p.symbol,
-            name: p.name,
-            quantity: p.quantity,
-            price: p.price,
-            currency: p.currency,
+          accountSummaries: accountSummaries.map(s => ({
+            accountName: s.accountName,
+            count: s.count,
+            totalValueJpy: s.totalValueJpy,
+            matchesFile: s.matchesFile,
           })),
           errors,
           totalRows: parsedPositions.length,
@@ -153,25 +129,49 @@ export async function POST(request: NextRequest) {
     try {
       // 事务开始
       await db.transaction(async (tx) => {
-        // 获取或创建账户
-        const accountRecords = await tx
-          .select()
-          .from(accounts)
-          .where(eq(accounts.name, accountName))
-          .limit(1);
+        // 获取文件中涉及的所有账户名
+        const accountNames = Array.from(new Set(parsedPositions.map(p => p.accountName)));
+        
+        // 获取或创建所有账户
+        const accountMap = new Map<string, string>();
+        
+        for (const accountName of accountNames) {
+          const existingAccounts = await tx
+            .select()
+            .from(accounts)
+            .where(eq(accounts.name, accountName))
+            .limit(1);
 
-        let accountId: string;
-        if (accountRecords.length === 0) {
-          const [newAccount] = await tx
-            .insert(accounts)
-            .values({
-              name: accountName,
-              type: 'tokutei',
-            })
-            .returning();
-          accountId = newAccount.id;
-        } else {
-          accountId = accountRecords[0].id;
+          // 从 parsedPositions 中找到该账户的类型
+          const accountType = parsedPositions.find(p => p.accountName === accountName)?.accountType || 'tokutei';
+
+          let accountId: string;
+          if (existingAccounts.length === 0) {
+            // 账户不存在，创建新账户
+            const [newAccount] = await tx
+              .insert(accounts)
+              .values({
+                name: accountName,
+                type: accountType,
+                broker: 'SBI',
+              })
+              .returning();
+            accountId = newAccount.id;
+          } else {
+            // 账户已存在，检查 type 是否一致
+            const existingAccount = existingAccounts[0];
+            accountId = existingAccount.id;
+            
+            if (existingAccount.type !== accountType) {
+              // type 不一致，更新为正确的 type
+              await tx
+                .update(accounts)
+                .set({ type: accountType })
+                .where(eq(accounts.id, accountId));
+            }
+          }
+          
+          accountMap.set(accountName, accountId);
         }
 
         // 创建批次
@@ -198,32 +198,30 @@ export async function POST(request: NextRequest) {
 
         // 写入各持仓
         for (const pos of parsedPositions) {
-          // 获取或创建 Instrument（按 symbol + currency）
+          const accountId = accountMap.get(pos.accountName)!;
+          
+          // 获取或创建 Instrument
+          // 股票：按 symbol + JPY
+          // 基金：按 symbol（已标准化）+ JPY
           let instrumentRecords = await tx
             .select()
             .from(instruments)
             .where(and(
               eq(instruments.symbol, pos.symbol),
-              eq(instruments.currency, pos.currency)
+              eq(instruments.currency, 'JPY')
             ))
             .limit(1);
 
           let instrumentId: string;
           if (instrumentRecords.length === 0) {
-            const { assetClass, unitBasis } = inferAssetClassAndUnitBasis(
-              pos.symbol,
-              pos.name,
-              pos.currency
-            );
-            
             const [newInstrument] = await tx
               .insert(instruments)
               .values({
                 symbol: pos.symbol,
                 name: pos.name,
-                assetClass,
-                currency: pos.currency,
-                unitBasis,
+                assetClass: pos.assetClass,
+                currency: 'JPY',
+                unitBasis: pos.unitBasis,
               })
               .returning();
             instrumentId = newInstrument.id;
@@ -231,7 +229,7 @@ export async function POST(request: NextRequest) {
             instrumentId = instrumentRecords[0].id;
           }
 
-          // Position 作成
+          // Position 创建
           await tx.insert(positions).values({
             snapshotId: snapshot.id,
             accountId,
@@ -239,7 +237,7 @@ export async function POST(request: NextRequest) {
             quantity: pos.quantity,
             avgCost: pos.avgCost,
             price: pos.price,
-            fxRateToJpy: pos.currency === 'JPY' ? '1' : null,
+            fxRateToJpy: '1', // JPY 汇率固定为 1
           });
         }
       });

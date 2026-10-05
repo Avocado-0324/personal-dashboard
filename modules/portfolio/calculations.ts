@@ -154,3 +154,43 @@ export function isStale(asOfDate: Date): boolean {
   const daysDiff = Math.floor((now.getTime() - asOfDate.getTime()) / (1000 * 60 * 60 * 24));
   return daysDiff > 7;
 }
+
+/**
+ * 计算单个持仓的日元市值（逐行 floor）
+ * 
+ * 契约 v0.3.1 §10：
+ * - 日元持仓：floor(数量 × 价格 ÷ unitBasis)
+ * - 外币持仓：floor(数量 × 价格 ÷ unitBasis × fxRateToJpy)
+ * - 现金同理：floor(amount × fxRateToJpy)
+ * 
+ * 所有评价额显示与汇总必须用此函数，确保「各行 floor 之和 = 总额」
+ */
+export function marketValueJpyFloor(params: {
+  quantity: string | Decimal;
+  price: string | Decimal;
+  unitBasis: string | Decimal;
+  fxRateToJpy: string | Decimal;
+}): Decimal {
+  const qty = params.quantity instanceof Decimal ? params.quantity : new Decimal(params.quantity);
+  const price = params.price instanceof Decimal ? params.price : new Decimal(params.price);
+  const unitBasis = params.unitBasis instanceof Decimal ? params.unitBasis : new Decimal(params.unitBasis);
+  const fxRate = params.fxRateToJpy instanceof Decimal ? params.fxRateToJpy : new Decimal(params.fxRateToJpy);
+  
+  // 计算：quantity * price / unitBasis * fxRateToJpy，然后 floor
+  const value = qty.times(price).div(unitBasis).times(fxRate);
+  return value.toDecimalPlaces(0, Decimal.ROUND_FLOOR);
+}
+
+/**
+ * 计算现金的日元金额（逐行 floor）
+ */
+export function cashValueJpyFloor(params: {
+  amount: string | Decimal;
+  fxRateToJpy: string | Decimal;
+}): Decimal {
+  const amount = params.amount instanceof Decimal ? params.amount : new Decimal(params.amount);
+  const fxRate = params.fxRateToJpy instanceof Decimal ? params.fxRateToJpy : new Decimal(params.fxRateToJpy);
+  
+  const value = amount.times(fxRate);
+  return value.toDecimalPlaces(0, Decimal.ROUND_FLOOR);
+}

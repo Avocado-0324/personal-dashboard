@@ -53,14 +53,13 @@ export function PortfolioCard({
         </div>
         
         <div className="text-center py-8">
-          <p className="text-muted mb-4">还没有持仓数据</p>
+          <p className="text-muted mb-4">还没有持仓数据：日本持仓可用 CSV 导入，美股发截图给 Grok。</p>
           <Link
             href="/portfolio"
             className="inline-block px-6 py-2 bg-accent text-background rounded-lg hover:opacity-90 transition-colors"
           >
             去录入
           </Link>
-          <p className="text-xs text-muted mt-3">支持手动、SBI CSV、截图</p>
         </div>
       </div>
     );

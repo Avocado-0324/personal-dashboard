@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Decimal from 'decimal.js';
-import { calculateXIRR } from '@/modules/portfolio/calculations';
+import { calculateXIRR, marketValueJpyFloor, cashValueJpyFloor } from '@/modules/portfolio/calculations';
 import { getUserSettings } from '@/lib/user-settings';
 import { getAllModules } from '@/lib/module-registry';
 
@@ -43,6 +43,26 @@ type Batch = {
   createdAt: string;
 };
 
+// 格式化数量：整数不带小数，小数最多4位并去除末尾0，加千分位
+function formatQuantity(qty: string): string {
+  const num = new Decimal(qty);
+  const isInteger = num.modulo(1).isZero();
+  
+  if (isInteger) {
+    // 整数：无小数点，加千分位
+    return num.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  } else {
+    // 小数：最多4位，去除末尾0
+    let formatted = num.toFixed(4);
+    // 去除末尾多余的0
+    formatted = formatted.replace(/0+$/, '').replace(/\.$/, '');
+    // 添加千分位（整数部分）
+    const parts = formatted.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return parts.join('.');
+  }
+}
+
 export default function PortfolioPage() {
   const [activeTab, setActiveTab] = useState<'positions' | 'cashflows' | 'snapshots' | 'imports'>('positions');
   const [data, setData] = useState<Data | null>(null);
@@ -76,12 +96,12 @@ export default function PortfolioPage() {
   });
 
   const [csvFile, setCsvFile] = useState<File | null>(null);
-  const [csvAccountName, setCsvAccountName] = useState('');
   const [csvAsOf, setCsvAsOf] = useState(new Date().toISOString().split('T')[0]);
   const [csvPreview, setCsvPreview] = useState<any>(null);
   const [csvErrors, setCsvErrors] = useState<any[]>([]);
   const [importing, setImporting] = useState(false);
   const [csvValidationError, setCsvValidationError] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     const settings = getUserSettings();
@@ -188,15 +208,14 @@ export default function PortfolioPage() {
   }
 
   async function handleCSVDryRun() {
-    if (!csvFile || !csvAccountName || !csvAsOf) {
-      setCsvValidationError('请输入文件、账户名和日期');
+    if (!csvFile || !csvAsOf) {
+      setCsvValidationError('请输入文件和日期');
       return;
     }
     setCsvValidationError(null);
 
     const formData = new FormData();
     formData.append('file', csvFile);
-    formData.append('accountName', csvAccountName);
     formData.append('asOf', csvAsOf);
 
     try {
@@ -207,10 +226,11 @@ export default function PortfolioPage() {
       
       const json = await res.json();
       if (res.ok) {
-        setCsvPreview(json.preview);
+        setCsvPreview(json);
         setCsvErrors(json.errors || []);
       } else {
         setCsvErrors(json.errors || [{ row: 0, message: json.error }]);
+        setCsvPreview(null);
       }
     } catch (error) {
       console.error('CSV dry-run failed:', error);
@@ -219,8 +239,8 @@ export default function PortfolioPage() {
   }
 
   async function handleCSVImport() {
-    if (!csvFile || !csvAccountName || !csvAsOf) {
-      setCsvValidationError('请输入文件、账户名和日期');
+    if (!csvFile || !csvAsOf) {
+      setCsvValidationError('请输入文件和日期');
       return;
     }
     setCsvValidationError(null);
@@ -229,7 +249,6 @@ export default function PortfolioPage() {
 
     const formData = new FormData();
     formData.append('file', csvFile);
-    formData.append('accountName', csvAccountName);
     formData.append('asOf', csvAsOf);
 
     try {
@@ -400,18 +419,20 @@ export default function PortfolioPage() {
         continue;
       }
       
-      const qty = new Decimal(position.quantity);
-      const price = new Decimal(position.price);
-      const fxRate = new Decimal(fxRateRaw);
-      const unitBasis = new Decimal(instrument.unitBasis);
+      // 使用逐行 floor 计算市值
+      const value = marketValueJpyFloor({
+        quantity: position.quantity,
+        price: position.price,
+        unitBasis: instrument.unitBasis,
+        fxRateToJpy: fxRateRaw,
+      });
       
-      totalValue = totalValue.plus(qty.times(price).div(unitBasis).times(fxRate));
+      totalValue = totalValue.plus(value);
     }
   }
 
   if (data?.cashBalances) {
     for (const { cash } of data.cashBalances) {
-      const amount = new Decimal(cash.amount);
       const fxRateRaw = cash.fxRateToJpy;
       
       if (!fxRateRaw || fxRateRaw === null) {
@@ -419,8 +440,12 @@ export default function PortfolioPage() {
         continue;
       }
       
-      const fxRate = new Decimal(fxRateRaw);
-      const value = amount.times(fxRate);
+      // 使用逐行 floor 计算现金
+      const value = cashValueJpyFloor({
+        amount: cash.amount,
+        fxRateToJpy: fxRateRaw,
+      });
+      
       totalCash = totalCash.plus(value);
       totalValue = totalValue.plus(value);
     }
@@ -630,10 +655,12 @@ export default function PortfolioPage() {
                             let marketValue = '缺汇率';
                             
                             if (fxRateRaw && fxRateRaw !== null) {
-                              const value = new Decimal(pos.position.quantity)
-                                .times(new Decimal(pos.position.price))
-                                .div(new Decimal(pos.instrument.unitBasis))
-                                .times(new Decimal(fxRateRaw));
+                              const value = marketValueJpyFloor({
+                                quantity: pos.position.quantity,
+                                price: pos.position.price,
+                                unitBasis: pos.instrument.unitBasis,
+                                fxRateToJpy: fxRateRaw,
+                              });
                               marketValue = '¥' + value.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
                             }
                             
@@ -644,10 +671,10 @@ export default function PortfolioPage() {
                                 <td className="py-3 text-foreground">{pos.instrument.name}</td>
                                 <td className="py-3 text-muted">{pos.instrument.symbol}</td>
                                 <td className="py-3 text-right font-mono text-foreground">
-                                  {parseFloat(pos.position.quantity).toFixed(2)}
+                                  {formatQuantity(pos.position.quantity)}
                                 </td>
                                 <td className="py-3 text-right font-mono text-foreground">
-                                  {parseFloat(pos.position.price).toFixed(2)}
+                                  {formatQuantity(pos.position.price)}
                                 </td>
                                 <td className="py-3 text-right">
                                   {fxRateRaw ? (
@@ -721,7 +748,7 @@ export default function PortfolioPage() {
                   ) : (
                     <div className="text-center py-12">
                       <p className="text-muted mb-4">还没有持仓数据</p>
-                      <p className="text-sm text-muted">请使用右侧的方式录入数据</p>
+                      <p className="text-sm text-muted">日本持仓可用 CSV 导入，美股发截图给 Grok</p>
                     </div>
                   )}
                 </div>
@@ -932,30 +959,72 @@ export default function PortfolioPage() {
                 )}
                 
                 <div className="space-y-3">
-                  <input
-                    type="file"
-                    accept=".csv"
-                    onChange={(e) => setCsvFile(e.target.files?.[0] || null)}
-                    className="block w-full text-sm text-muted
-                      file:mr-4 file:py-2 file:px-4
-                      file:rounded file:border-0
-                      file:text-sm file:font-semibold
-                      file:bg-accent file:text-background
-                      hover:file:opacity-90"
-                  />
-                  <input
-                    type="text"
-                    placeholder="账户名"
-                    value={csvAccountName}
-                    onChange={(e) => setCsvAccountName(e.target.value)}
-                    className="w-full px-3 py-2 bg-card-bg border border-card-border rounded text-foreground"
-                  />
-                  <input
-                    type="date"
-                    value={csvAsOf}
-                    onChange={(e) => setCsvAsOf(e.target.value)}
-                    className="w-full px-3 py-2 bg-card-bg border border-card-border rounded text-foreground"
-                  />
+                  {/* 自定义拖放区域 */}
+                  <label
+                    htmlFor="csv-file-input"
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDragging(true);
+                    }}
+                    onDragLeave={() => setIsDragging(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDragging(false);
+                      const files = e.dataTransfer.files;
+                      if (files.length > 0) {
+                        setCsvFile(files[0]);
+                        setCsvPreview(null);
+                        setCsvErrors([]);
+                      }
+                    }}
+                    className={`
+                      block border-2 border-dashed rounded-lg p-6 text-center cursor-pointer
+                      transition-colors focus-within:ring-2 focus-within:ring-accent
+                      ${isDragging 
+                        ? 'border-accent bg-accent/5' 
+                        : 'border-card-border bg-tile hover:border-accent/50'
+                      }
+                    `}
+                  >
+                    <input
+                      id="csv-file-input"
+                      type="file"
+                      accept=".csv"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setCsvFile(file);
+                          setCsvPreview(null);
+                          setCsvErrors([]);
+                        }
+                      }}
+                      className="sr-only"
+                    />
+                    <div className="space-y-2">
+                      <p className="text-sm text-foreground">
+                        拖入 SBI 保有証券 CSV，或点击选择文件
+                      </p>
+                      <p className="text-xs text-muted">
+                        SBI：口座管理 &gt; 保有証券 &gt; CSV ダウンロード（仅日本持仓）
+                      </p>
+                      {csvFile && (
+                        <p className="text-xs text-accent mt-2">
+                          ✓ {csvFile.name}
+                        </p>
+                      )}
+                    </div>
+                  </label>
+                  
+                  <div>
+                    <label className="block text-xs text-muted mb-1">快照日期</label>
+                    <input
+                      type="date"
+                      value={csvAsOf}
+                      onChange={(e) => setCsvAsOf(e.target.value)}
+                      className="w-full px-3 py-2 bg-card-bg border border-card-border rounded text-foreground"
+                    />
+                  </div>
+                  
                   <button
                     onClick={handleCSVDryRun}
                     disabled={!csvFile}
@@ -964,25 +1033,66 @@ export default function PortfolioPage() {
                     预览
                   </button>
                   
-                  {csvPreview && (
-                    <div className="p-3 bg-tile rounded text-xs">
-                      <p className="text-foreground mb-2">{csvPreview.length} 行数据</p>
-                      <button
-                        onClick={handleCSVImport}
-                        disabled={importing || csvErrors.length > 0}
-                        className="w-full px-4 py-2 bg-accent text-background rounded hover:opacity-90 disabled:opacity-50"
-                      >
-                        {importing ? '导入中...' : '导入'}
-                      </button>
+                  {csvPreview && csvPreview.accountSummaries && (
+                    <div className="p-3 bg-tile rounded space-y-2">
+                      <p className="text-xs text-muted mb-2">
+                        共 {csvPreview.totalRows} 条，按账户：
+                      </p>
+                      {csvPreview.accountSummaries.map((summary: any, i: number) => (
+                        <div key={i} className="text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-foreground">{summary.accountName}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-muted">{summary.count} 条</span>
+                              <span className="text-muted">¥{parseFloat(summary.totalValueJpy).toLocaleString()}</span>
+                              {summary.matchesFile ? (
+                                <span className="text-up">✓</span>
+                              ) : (
+                                <span className="text-down">✗</span>
+                              )}
+                            </div>
+                          </div>
+                          {!summary.matchesFile && (
+                            <p className="text-xs text-down mt-1">✗ 与文件小计不符</p>
+                          )}
+                        </div>
+                      ))}
+                      
+                      <p className="text-xs text-muted pt-2 border-t border-card-border">
+                        将更新以上 {csvPreview.accountSummaries.length} 个账户的持仓，其他账户（如美股）不变
+                      </p>
+                      
+                      {csvErrors.length === 0 && csvPreview.totalRows > 0 ? (
+                        <button
+                          onClick={handleCSVImport}
+                          disabled={importing}
+                          className="w-full px-4 py-2 bg-accent text-background rounded hover:opacity-90 disabled:opacity-50 mt-3"
+                        >
+                          {importing ? '导入中...' : '导入'}
+                        </button>
+                      ) : (
+                        <div className="mt-3">
+                          {csvPreview.totalRows === 0 ? (
+                            <p className="text-xs text-muted mb-1">没有可导入的持仓</p>
+                          ) : (
+                            <p className="text-xs text-down mb-1">有错误，无法导入</p>
+                          )}
+                          <button
+                            disabled
+                            className="w-full px-4 py-2 bg-tile text-muted rounded opacity-50 cursor-not-allowed"
+                          >
+                            导入
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                   
                   {csvErrors.length > 0 && (
-                    <div className="p-3 bg-down/10 rounded text-xs">
-                      <p className="text-down font-semibold mb-2">错误：</p>
+                    <div className="p-3 bg-down/10 rounded text-xs space-y-1">
                       {csvErrors.map((err, i) => (
                         <p key={i} className="text-down">
-                          第 {err.row} 行: {err.message}
+                          {err.message}
                         </p>
                       ))}
                     </div>
@@ -992,9 +1102,9 @@ export default function PortfolioPage() {
 
               <div className="mb-6">
                 <h4 className="text-sm font-medium text-foreground mb-2">截图识别</h4>
-                <div className="bg-tile rounded-lg p-4 text-sm text-muted">
-                  <p className="mb-2">将持仓截图发送至 Grok 私聊</p>
-                  <p className="text-xs text-muted">确认后自动写入</p>
+                <div className="bg-tile rounded-lg p-3 text-xs text-muted space-y-2">
+                  <p>美股等外国株用截图：SBI 外国株式 &gt; 保有証券，截图发给 Grok</p>
+                  <p className="text-xs text-muted">会先列表给你核对，确认后才写入</p>
                 </div>
               </div>
 
