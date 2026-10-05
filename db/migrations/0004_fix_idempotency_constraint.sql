@@ -3,7 +3,7 @@
 -- 0003 tried to drop 'import_batches_idempotency_key_unique' which didn't exist
 
 -- Drop any existing full-table unique constraints on idempotency_key
-DROP INDEX IF EXISTS import_batches_idempotency_key_key;
+-- Note: DROP CONSTRAINT will also drop the associated index automatically
 ALTER TABLE "import_batches" DROP CONSTRAINT IF EXISTS "import_batches_idempotency_key_key";
 ALTER TABLE "import_batches" DROP CONSTRAINT IF EXISTS "import_batches_idempotency_key_unique";
 

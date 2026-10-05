@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPoolDb, isDatabaseConfigured } from '@/db/client';
 import { positions, cashBalances } from '@/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
+import Decimal from 'decimal.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,8 +37,25 @@ export async function PATCH(
       );
     }
 
-    const rate = parseFloat(rateToJpy);
-    if (isNaN(rate) || rate <= 0) {
+    // 使用正则和 Decimal 校验，拒绝 "150abc" 等非法输入
+    if (typeof rateToJpy !== 'string' || !/^\d+(\.\d+)?$/.test(rateToJpy)) {
+      return NextResponse.json(
+        { error: '汇率格式无效' },
+        { status: 400 }
+      );
+    }
+
+    let rate: Decimal;
+    try {
+      rate = new Decimal(rateToJpy);
+    } catch {
+      return NextResponse.json(
+        { error: '汇率格式无效' },
+        { status: 400 }
+      );
+    }
+
+    if (rate.lte(0)) {
       return NextResponse.json(
         { error: '汇率必须大于 0' },
         { status: 400 }

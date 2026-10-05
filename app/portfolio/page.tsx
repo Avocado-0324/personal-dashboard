@@ -468,7 +468,7 @@ export default function PortfolioPage() {
             </Link>
             <h1 className="text-xl font-bold text-foreground">持仓管理</h1>
             {missingFxCount > 0 && (
-              <span className="text-sm text-amber-500">
+              <span className="text-sm text-warn">
                 缺少 {missingFxCount} 个汇率
               </span>
             )}
@@ -478,42 +478,42 @@ export default function PortfolioPage() {
 
       <main className="max-w-7xl mx-auto px-4 py-8">
         {successMessage && (
-          <div className="mb-4 p-4 bg-lime-500/10 border border-lime-500/20 rounded-lg flex justify-between items-center">
-            <p className="text-lime-400">{successMessage}</p>
-            <button onClick={() => setSuccessMessage(null)} className="text-lime-400 hover:opacity-80">
+          <div className="mb-4 p-4 bg-up/10 border border-up/20 rounded-lg flex justify-between items-center">
+            <p className="text-up">{successMessage}</p>
+            <button onClick={() => setSuccessMessage(null)} className="text-up hover:opacity-80">
               ✕
             </button>
           </div>
         )}
 
         {errorMessage && (
-          <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex justify-between items-center">
-            <p className="text-red-400">{errorMessage}</p>
-            <button onClick={() => setErrorMessage(null)} className="text-red-400 hover:opacity-80">
+          <div className="mb-4 p-4 bg-down/10 border border-down/20 rounded-lg flex justify-between items-center">
+            <p className="text-down">{errorMessage}</p>
+            <button onClick={() => setErrorMessage(null)} className="text-down hover:opacity-80">
               ✕
             </button>
           </div>
         )}
 
         {fxRateSuccess && (
-          <div className="mb-4 p-4 bg-lime-500/10 border border-lime-500/20 rounded-lg flex justify-between items-center">
-            <p className="text-lime-400">已更新 {fxRateSuccess.count} 条 {fxRateSuccess.currency} 记录</p>
-            <button onClick={() => setFxRateSuccess(null)} className="text-lime-400 hover:opacity-80">
+          <div className="mb-4 p-4 bg-up/10 border border-up/20 rounded-lg flex justify-between items-center">
+            <p className="text-up">已更新 {fxRateSuccess.count} 条 {fxRateSuccess.currency} 记录</p>
+            <button onClick={() => setFxRateSuccess(null)} className="text-up hover:opacity-80">
               ✕
             </button>
           </div>
         )}
 
         {importWarning && (
-          <div className="mb-4 p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-            <p className="text-amber-400 mb-3">{importWarning.message}</p>
+          <div className="mb-4 p-4 bg-warn/10 border border-warn/20 rounded-lg">
+            <p className="text-warn mb-3">{importWarning.message}</p>
             <div className="flex gap-2">
               <button
                 onClick={() => {
                   setActiveTab('imports');
                   setImportWarning(null);
                 }}
-                className="px-4 py-2 bg-amber-500/20 text-amber-400 rounded hover:bg-amber-500/30"
+                className="px-4 py-2 bg-warn/20 text-warn rounded hover:bg-warn/30"
               >
                 查看这批
               </button>
@@ -532,7 +532,7 @@ export default function PortfolioPage() {
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted mb-1">总资产</p>
               {missingFxCount > 0 && (
-                <p className="text-xs text-amber-500">有 {missingFxCount} 条未计入</p>
+                <p className="text-xs text-warn">有 {missingFxCount} 条未计入</p>
               )}
             </div>
             <p className="text-2xl font-bold font-mono text-foreground">
@@ -690,12 +690,12 @@ export default function PortfolioPage() {
                                         </button>
                                       </div>
                                       {fxRateValidationError && (
-                                        <p className="text-xs text-red-400">{fxRateValidationError}</p>
+                                        <p className="text-xs text-down">{fxRateValidationError}</p>
                                       )}
                                       <p className="text-xs text-muted">将用于本快照所有 {pos.instrument.currency} 持仓和现金</p>
                                     </div>
                                   ) : (
-                                    <div className="flex items-center justify-end gap-2 text-amber-500">
+                                    <div className="flex items-center justify-end gap-2 text-warn">
                                       <span>缺少汇率，未计入总资产</span>
                                       {latestSnapshotId && (
                                         <button
@@ -806,8 +806,8 @@ export default function PortfolioPage() {
                               <td className="py-3">
                                 <span className={`px-2 py-1 rounded text-xs ${
                                   cashFlow.direction === 'deposit' 
-                                    ? 'bg-lime-500/10 text-lime-400'
-                                    : 'bg-red-500/10 text-red-400'
+                                    ? 'bg-up/10 text-up'
+                                    : 'bg-down/10 text-down'
                                 }`}>
                                   {cashFlow.direction === 'deposit' ? '入金' : '出金'}
                                 </span>
@@ -868,8 +868,8 @@ export default function PortfolioPage() {
                               </p>
                               <span className={`inline-block mt-2 px-2 py-1 rounded text-xs ${
                                 batch.status === 'committed' 
-                                  ? 'bg-lime-500/10 text-lime-400'
-                                  : 'bg-red-500/10 text-red-400'
+                                  ? 'bg-up/10 text-up'
+                                  : 'bg-down/10 text-down'
                               }`}>
                                 {batch.status === 'committed' ? '已提交' : '已撤销'}
                               </span>
@@ -882,7 +882,7 @@ export default function PortfolioPage() {
                                     <div className="flex gap-2">
                                       <button
                                         onClick={() => handleRevertBatch(batch.id)}
-                                        className="px-3 py-1 text-xs bg-red-500/20 text-red-400 rounded hover:bg-red-500/30"
+                                        className="px-3 py-1 text-xs bg-down/20 text-down rounded hover:bg-down/30"
                                       >
                                         确认撤销
                                       </button>
@@ -897,7 +897,7 @@ export default function PortfolioPage() {
                                 ) : (
                                   <button
                                     onClick={() => setRevertConfirm(batch.id)}
-                                    className="px-3 py-1 text-sm bg-red-500/10 text-red-400 rounded hover:bg-red-500/20"
+                                    className="px-3 py-1 text-sm bg-down/10 text-down rounded hover:bg-down/20"
                                   >
                                     撤销
                                   </button>
@@ -926,7 +926,7 @@ export default function PortfolioPage() {
                 <h4 className="text-sm font-medium text-foreground mb-3">CSV 导入</h4>
                 
                 {csvValidationError && (
-                  <div className="mb-3 p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-400">
+                  <div className="mb-3 p-2 bg-down/10 border border-down/20 rounded text-xs text-down">
                     {csvValidationError}
                   </div>
                 )}
@@ -978,10 +978,10 @@ export default function PortfolioPage() {
                   )}
                   
                   {csvErrors.length > 0 && (
-                    <div className="p-3 bg-red-500/10 rounded text-xs">
-                      <p className="text-red-400 font-semibold mb-2">错误：</p>
+                    <div className="p-3 bg-down/10 rounded text-xs">
+                      <p className="text-down font-semibold mb-2">错误：</p>
                       {csvErrors.map((err, i) => (
-                        <p key={i} className="text-red-400">
+                        <p key={i} className="text-down">
                           第 {err.row} 行: {err.message}
                         </p>
                       ))}

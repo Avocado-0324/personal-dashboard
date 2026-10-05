@@ -86,12 +86,12 @@ export function PortfolioCard({
             <h3 className="text-lg font-semibold text-foreground">持仓</h3>
             <p className="text-sm text-muted">快照日期：{data.asOf}</p>
             {data.stale && (
-              <p className="text-xs text-amber-500 mt-1">
+              <p className="text-xs text-warn mt-1">
                 数据已 {Math.floor((Date.now() - new Date(data.asOf).getTime()) / (1000 * 60 * 60 * 24))} 天未更新
               </p>
             )}
             {data.missingFxCount > 0 && (
-              <p className="text-xs text-amber-500 mt-1">
+              <p className="text-xs text-warn mt-1">
                 缺少 {data.missingFxCount} 个汇率
               </p>
             )}
