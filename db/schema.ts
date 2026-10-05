@@ -35,7 +35,7 @@ export const positions = pgTable('positions', {
   quantity: numeric('quantity', { precision: 24, scale: 8 }).notNull(),
   avgCost: numeric('avg_cost', { precision: 24, scale: 8 }).notNull(),
   price: numeric('price', { precision: 24, scale: 8 }).notNull(),
-  fxRateToJpy: numeric('fx_rate_to_jpy', { precision: 14, scale: 6 }).notNull().default('1'),
+  fxRateToJpy: numeric('fx_rate_to_jpy', { precision: 14, scale: 6 }), // nullable，缺汇率时为 null
 });
 
 export const cashBalances = pgTable('cash_balances', {
@@ -44,7 +44,7 @@ export const cashBalances = pgTable('cash_balances', {
   accountId: uuid('account_id').notNull().references(() => accounts.id),
   currency: char('currency', { length: 3 }).notNull(),
   amount: numeric('amount', { precision: 20, scale: 2 }).notNull(),
-  fxRateToJpy: numeric('fx_rate_to_jpy', { precision: 14, scale: 6 }).notNull().default('1'),
+  fxRateToJpy: numeric('fx_rate_to_jpy', { precision: 14, scale: 6 }), // nullable
 });
 
 export const cashFlows = pgTable('cash_flows', {

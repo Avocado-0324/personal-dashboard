@@ -29,6 +29,7 @@ export async function GET() {
     // 获取最新快照的持仓
     const latestSnapshot = recentSnapshots[0];
     let allPositions: any[] = [];
+    let allCashBalances: any[] = [];
     
     if (latestSnapshot) {
       allPositions = await db
@@ -41,6 +42,15 @@ export async function GET() {
         .innerJoin(accounts, eq(positions.accountId, accounts.id))
         .innerJoin(instruments, eq(positions.instrumentId, instruments.id))
         .where(eq(positions.snapshotId, latestSnapshot.id));
+      
+      allCashBalances = await db
+        .select({
+          cash: cashBalances,
+          account: accounts,
+        })
+        .from(cashBalances)
+        .innerJoin(accounts, eq(cashBalances.accountId, accounts.id))
+        .where(eq(cashBalances.snapshotId, latestSnapshot.id));
     }
 
     return NextResponse.json(
@@ -48,6 +58,7 @@ export async function GET() {
         accounts: allAccounts,
         snapshots: recentSnapshots,
         positions: allPositions,
+        cashBalances: allCashBalances,
       },
       { headers: { 'Cache-Control': 'no-store' } }
     );

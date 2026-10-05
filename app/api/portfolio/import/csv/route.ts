@@ -80,114 +80,113 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 書き込み（トランザクション）
+    // 书き込み（トランザクション）
     const db = getDb();
 
-    // アカウント取得または作成
-    let accountRecords = await db
-      .select()
-      .from(accounts)
-      .where(eq(accounts.name, accountName))
-      .limit(1);
-
-    let accountId: string;
-    if (accountRecords.length === 0) {
-      const [newAccount] = await db
-        .insert(accounts)
-        .values({
-          name: accountName,
-          type: 'tokutei', // デフォルト
-        })
-        .returning();
-      accountId = newAccount.id;
-    } else {
-      accountId = accountRecords[0].id;
-    }
-
-    // バッチ作成
-    const [batch] = await db
-      .insert(importBatches)
-      .values({
-        source: 'csv',
-        idempotencyKey: `csv-${Date.now()}-${Math.random()}`,
-        filename: file.name,
-        rowCount: parsedPositions.length,
-        status: 'committed',
-      })
-      .returning();
-
-    // スナップショット作成
-    const [snapshot] = await db
-      .insert(snapshots)
-      .values({
-        asOf,
-        source: 'csv',
-        batchId: batch.id,
-      })
-      .returning();
-
-    // 各ポジションを書き込み
-    let imported = 0;
-    const importErrors: CSVError[] = [];
-
-    for (let i = 0; i < parsedPositions.length; i++) {
-      const pos = parsedPositions[i];
-      const row = i + 2;
-
-      try {
-        // Instrument 取得または作成
-        let instrumentRecords = await db
+    try {
+      // トランザクション開始
+      await db.transaction(async (tx) => {
+        // アカウント取得または作成
+        const accountRecords = await tx
           .select()
-          .from(instruments)
-          .where(eq(instruments.symbol, pos.symbol))
+          .from(accounts)
+          .where(eq(accounts.name, accountName))
           .limit(1);
 
-        let instrumentId: string;
-        if (instrumentRecords.length === 0) {
-          const [newInstrument] = await db
-            .insert(instruments)
+        let accountId: string;
+        if (accountRecords.length === 0) {
+          const [newAccount] = await tx
+            .insert(accounts)
             .values({
-              symbol: pos.symbol,
-              name: pos.name,
-              assetClass: 'jp_stock', // デフォルト
-              currency: pos.currency,
-              unitBasis: '1',
+              name: accountName,
+              type: 'tokutei',
             })
             .returning();
-          instrumentId = newInstrument.id;
+          accountId = newAccount.id;
         } else {
-          instrumentId = instrumentRecords[0].id;
+          accountId = accountRecords[0].id;
         }
 
-        // Position 作成
-        await db.insert(positions).values({
-          snapshotId: snapshot.id,
-          accountId,
-          instrumentId,
-          quantity: pos.quantity,
-          avgCost: pos.avgCost,
-          price: pos.price,
-          fxRateToJpy: pos.currency === 'USD' ? '150' : '1', // 仮の為替レート
-        });
+        // バッチ作成
+        const [batch] = await tx
+          .insert(importBatches)
+          .values({
+            source: 'csv',
+            idempotencyKey: `csv-${Date.now()}-${Math.random()}`,
+            filename: file.name,
+            rowCount: parsedPositions.length,
+            status: 'committed',
+          })
+          .returning();
 
-        imported++;
-      } catch (error) {
-        importErrors.push({
-          row,
-          message: error instanceof Error ? error.message : '書き込みエラー',
-        });
-      }
+        // スナップショット作成
+        const [snapshot] = await tx
+          .insert(snapshots)
+          .values({
+            asOf,
+            source: 'csv',
+            batchId: batch.id,
+          })
+          .returning();
+
+        // 各ポジションを書き込み
+        for (const pos of parsedPositions) {
+          // Instrument 取得または作成
+          let instrumentRecords = await tx
+            .select()
+            .from(instruments)
+            .where(eq(instruments.symbol, pos.symbol))
+            .limit(1);
+
+          let instrumentId: string;
+          if (instrumentRecords.length === 0) {
+            const [newInstrument] = await tx
+              .insert(instruments)
+              .values({
+                symbol: pos.symbol,
+                name: pos.name,
+                assetClass: 'jp_stock',
+                currency: pos.currency,
+                unitBasis: '1',
+              })
+              .returning();
+            instrumentId = newInstrument.id;
+          } else {
+            instrumentId = instrumentRecords[0].id;
+          }
+
+          // Position 作成
+          await tx.insert(positions).values({
+            snapshotId: snapshot.id,
+            accountId,
+            instrumentId,
+            quantity: pos.quantity,
+            avgCost: pos.avgCost,
+            price: pos.price,
+            fxRateToJpy: pos.currency === 'JPY' ? '1' : null,
+          });
+        }
+      });
+
+      return NextResponse.json(
+        {
+          imported: parsedPositions.length,
+          errors: [],
+          skipped: 0,
+        },
+        { headers: { 'Cache-Control': 'no-store' } }
+      );
+    } catch (txError) {
+      // トランザクション失敗
+      console.error('Transaction failed:', txError);
+      return NextResponse.json(
+        {
+          imported: 0,
+          errors: [{ row: 0, message: 'トランザクションが失敗しました' }],
+        },
+        { status: 500, headers: { 'Cache-Control': 'no-store' } }
+      );
     }
-
-    return NextResponse.json(
-      {
-        batchId: batch.id,
-        imported,
-        errors: importErrors,
-        skipped: importErrors.length,
-      },
-      { headers: { 'Cache-Control': 'no-store' } }
-    );
   } catch (error) {
     console.error('CSV import error:', error);
     return NextResponse.json(

@@ -82,13 +82,22 @@ export async function loadPortfolioData(): Promise<PortfolioData | null> {
     unrealizedPnl: Decimal;
     accountType: string;
   }> = [];
+  let missingFxCount = 0;
 
   for (const { position, account, instrument } of allPositions) {
     const quantity = new Decimal(position.quantity);
     const price = new Decimal(position.price);
     const avgCost = new Decimal(position.avgCost);
-    const fxRate = new Decimal(position.fxRateToJpy);
+    const fxRateRaw = position.fxRateToJpy;
     const unitBasis = new Decimal(instrument.unitBasis);
+
+    // 缺汇率则跳过汇总
+    if (!fxRateRaw || fxRateRaw === null) {
+      missingFxCount++;
+      continue;
+    }
+
+    const fxRate = new Decimal(fxRateRaw);
 
     // 计算市值：quantity * price / unitBasis * fxRate
     const value = quantity.times(price).div(unitBasis).times(fxRate);
@@ -117,7 +126,15 @@ export async function loadPortfolioData(): Promise<PortfolioData | null> {
   let totalCash = new Decimal(0);
   for (const { cash, account } of allCashBalances) {
     const amount = new Decimal(cash.amount);
-    const fxRate = new Decimal(cash.fxRateToJpy);
+    const fxRateRaw = cash.fxRateToJpy;
+
+    // 缺汇率则跳过
+    if (!fxRateRaw || fxRateRaw === null) {
+      missingFxCount++;
+      continue;
+    }
+
+    const fxRate = new Decimal(fxRateRaw);
     const value = amount.times(fxRate);
 
     totalValue = totalValue.plus(value);
@@ -158,7 +175,7 @@ export async function loadPortfolioData(): Promise<PortfolioData | null> {
 
   const xirr = calculateXIRR(xirrFlows);
 
-  // 按账户分布
+  // 按账户分布（现金已在上面累加到账户 type 里）
   const allocationByAccount = Array.from(positionsByAccount.entries())
     .map(([type, value]) => ({
       accountType: type,
@@ -167,16 +184,6 @@ export async function loadPortfolioData(): Promise<PortfolioData | null> {
       ratio: totalValue.gt(0) ? value.div(totalValue).toFixed(4) : '0',
     }))
     .sort((a, b) => new Decimal(b.valueJpy).minus(new Decimal(a.valueJpy)).toNumber());
-
-  // 加上现金（如果有单独的现金账户或者有现金余额）
-  if (totalCash.gt(0)) {
-    allocationByAccount.push({
-      accountType: 'cash',
-      label: '现金',
-      valueJpy: totalCash.toFixed(0),
-      ratio: totalValue.gt(0) ? totalCash.div(totalValue).toFixed(4) : '0',
-    });
-  }
 
   // 按资产类别分布
   const allocationByAssetClass = Array.from(positionsByAssetClass.entries())
@@ -188,7 +195,7 @@ export async function loadPortfolioData(): Promise<PortfolioData | null> {
     }))
     .sort((a, b) => new Decimal(b.valueJpy).minus(new Decimal(a.valueJpy)).toNumber());
 
-  // 加上现金
+  // 现金单列一项到资产类别分布
   if (totalCash.gt(0)) {
     allocationByAssetClass.push({
       assetClass: 'cash',

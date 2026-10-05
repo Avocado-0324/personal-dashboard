@@ -83,8 +83,8 @@ export default async function HomePage() {
   }
 
   // 获取持仓 summary（仅在模块开启时）
-  const portfolioEnabled = userSettings.modules?.portfolio?.enabled !== false && 
-                          modules.some(m => m.id === 'portfolio');
+  const portfolioModule = modules.find(m => m.id === 'portfolio');
+  const portfolioEnabled = !!portfolioModule; // 如果在 enabledModules 里，就是开启的
   let portfolioSummary = null;
   if (portfolioEnabled) {
     try {

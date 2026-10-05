@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Decimal from 'decimal.js';
+import { calculateXIRR } from '@/modules/portfolio/calculations';
 
 type Account = {
   id: string;
@@ -14,6 +15,16 @@ type Position = {
   position: any;
   account: any;
   instrument: any;
+};
+
+type Data = {
+  accounts: Account[];
+  positions: Position[];
+  snapshots: any[];
+  cashBalances?: Array<{
+    cash: any;
+    account: any;
+  }>;
 };
 
 type CashFlow = {
@@ -32,11 +43,7 @@ type Batch = {
 
 export default function PortfolioPage() {
   const [activeTab, setActiveTab] = useState<'positions' | 'cashflows' | 'snapshots' | 'imports'>('positions');
-  const [data, setData] = useState<{
-    accounts: Account[];
-    positions: Position[];
-    snapshots: any[];
-  } | null>(null);
+  const [data, setData] = useState<Data | null>(null);
   const [cashFlows, setCashFlows] = useState<CashFlow[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -254,12 +261,33 @@ export default function PortfolioPage() {
     for (const { position, instrument } of data.positions) {
       const qty = new Decimal(position.quantity);
       const price = new Decimal(position.price);
-      const fxRate = new Decimal(position.fxRateToJpy);
+      const fxRateRaw = position.fxRateToJpy;
       const unitBasis = new Decimal(instrument.unitBasis);
+      
+      // 缺汇率跳过
+      if (!fxRateRaw || fxRateRaw === null) continue;
+      
+      const fxRate = new Decimal(fxRateRaw);
       totalValue = totalValue.plus(qty.times(price).div(unitBasis).times(fxRate));
     }
   }
 
+  // 计算现金余额
+  if (data?.cashBalances) {
+    for (const { cash } of data.cashBalances) {
+      const amount = new Decimal(cash.amount);
+      const fxRateRaw = cash.fxRateToJpy;
+      
+      // 缺汇率跳过
+      if (!fxRateRaw || fxRateRaw === null) continue;
+      
+      const fxRate = new Decimal(fxRateRaw);
+      const value = amount.times(fxRate);
+      totalCash = totalCash.plus(value);
+      totalValue = totalValue.plus(value);
+    }
+  }
+  
   let netContribution = new Decimal(0);
   for (const { cashFlow } of cashFlows) {
     const amount = new Decimal(cashFlow.amountJpy);
@@ -271,6 +299,26 @@ export default function PortfolioPage() {
   }
 
   const pnl = totalValue.minus(netContribution);
+  
+  // 计算 XIRR
+  let xirr: Decimal | null = null;
+  if (cashFlows.length > 0 && data?.snapshots && data.snapshots.length > 0) {
+    const flows: Array<{ date: Date; amount: Decimal }> = cashFlows.map(({ cashFlow }) => ({
+      date: new Date(cashFlow.date),
+      amount: cashFlow.direction === 'deposit'
+        ? new Decimal(cashFlow.amountJpy).neg()
+        : new Decimal(cashFlow.amountJpy),
+    }));
+    
+    // 加上终值
+    const latestAsOf = data.snapshots[0].asOf;
+    flows.push({
+      date: new Date(latestAsOf),
+      amount: totalValue,
+    });
+    
+    xirr = calculateXIRR(flows);
+  }
 
   return (
     <div className="min-h-screen bg-[#0a0b0f]">
@@ -303,7 +351,13 @@ export default function PortfolioPage() {
           </div>
           <div className="rounded-2xl bg-gray-900 border border-gray-800 p-4">
             <p className="text-xs text-gray-400 mb-1">年化 XIRR</p>
-            <p className="text-sm text-gray-500">数据不足</p>
+            {xirr ? (
+              <p className={`text-2xl font-bold font-mono ${xirr.gte(0) ? 'text-lime-400' : 'text-red-400'}`}>
+                {xirr.times(100).toFixed(1)}%
+              </p>
+            ) : (
+              <p className="text-sm text-gray-500">数据不足</p>
+            )}
           </div>
           <div className="rounded-2xl bg-gray-900 border border-gray-800 p-4">
             <p className="text-xs text-gray-400 mb-1">现金</p>

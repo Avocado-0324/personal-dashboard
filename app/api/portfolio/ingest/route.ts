@@ -66,7 +66,18 @@ export async function POST(request: NextRequest) {
 
     const providedKey = authHeader.slice(7);
     
-    if (!timingSafeEqual(Buffer.from(expectedKey), Buffer.from(providedKey))) {
+    // 长度检查，避免 timingSafeEqual throw
+    const expectedBuffer = Buffer.from(expectedKey);
+    const providedBuffer = Buffer.from(providedKey);
+    
+    if (expectedBuffer.length !== providedBuffer.length) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+    
+    if (!timingSafeEqual(expectedBuffer, providedBuffer)) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
@@ -245,7 +256,9 @@ export async function POST(request: NextRequest) {
           accountId,
           currency: cash.currency,
           amount: cash.amount,
-          fxRateToJpy: cash.fxRateToJpy || '1',
+          fxRateToJpy: cash.fxRateToJpy && cash.fxRateToJpy !== ''
+            ? cash.fxRateToJpy
+            : (cash.currency === 'JPY' ? '1' : null),
         });
       }
     }
