@@ -228,7 +228,15 @@ export default function PortfolioPage() {
       
       const json = await res.json();
       if (res.ok) {
-        alert(`导入完成：${json.imported} 条`);
+        if (json.alreadyImported) {
+          // 重复导入
+          if (confirm(`${json.message}\n\n点击"确定"查看这批记录`)) {
+            setActiveTab('imports');
+          }
+        } else {
+          // 新导入成功
+          alert(`导入完成：${json.imported} 条`);
+        }
         setCsvFile(null);
         setCsvPreview(null);
         setCsvErrors([]);

@@ -96,24 +96,36 @@ export async function POST(request: NextRequest) {
 
     const db = getPoolDb();
 
-    // 检查 idempotency key
+    // 检查 idempotency key（只对未撤销的批次）
     const existingBatches = await db
       .select()
       .from(importBatches)
-      .where(eq(importBatches.idempotencyKey, data.idempotencyKey))
+      .where(and(
+        eq(importBatches.idempotencyKey, data.idempotencyKey),
+        sql`${importBatches.status} <> 'reverted'`
+      ))
       .limit(1);
     
     const existingBatch = existingBatches[0];
 
     if (existingBatch && existingBatch.status === 'committed') {
+      const importTime = new Date(existingBatch.createdAt!);
+      const timeStr = importTime.toLocaleString('zh-CN', {
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).replace('月', '月').replace('日', '日');
+      
       return NextResponse.json(
         {
           batchId: existingBatch.id,
           inserted: {
             positions: 0,
             cashFlows: 0,
-            message: 'Already processed',
+            message: `这个批次已经导入过（${timeStr}），没有重复写入`,
           },
+          alreadyImported: true,
         },
         {
           headers: {
@@ -127,16 +139,10 @@ export async function POST(request: NextRequest) {
     let cashFlowsInserted = 0;
     let batchId: string;
 
-    // 在事务中执行所有操作
-    await db.transaction(async (tx) => {
-      // 如果存在已撤销的批次，先删除（允许重试）
-      if (existingBatch && existingBatch.status === 'reverted') {
-        await tx
-          .delete(importBatches)
-          .where(eq(importBatches.id, existingBatch.id));
-      }
-      
-      // 创建批次
+    try {
+      // 在事务中执行所有操作
+      await db.transaction(async (tx) => {
+        // 创建批次
       const [batch] = await tx
         .insert(importBatches)
         .values({
@@ -317,23 +323,72 @@ export async function POST(request: NextRequest) {
           rowCount: positionsInserted + cashFlowsInserted,
         })
         .where(eq(importBatches.id, batch.id));
-    });
+      });
 
-    return NextResponse.json(
-      {
-        batchId: batchId!,
-        inserted: {
-          positions: positionsInserted,
-          cashFlows: cashFlowsInserted,
+      return NextResponse.json(
+        {
+          batchId: batchId!,
+          inserted: {
+            positions: positionsInserted,
+            cashFlows: cashFlowsInserted,
+          },
         },
-      },
-      {
-        status: 201,
-        headers: {
-          'Cache-Control': 'no-store',
-        },
+        {
+          status: 201,
+          headers: {
+            'Cache-Control': 'no-store',
+          },
+        }
+      );
+    } catch (txError: any) {
+      // 处理唯一约束冲突（并发导入）
+      if (txError?.code === '23505' && txError?.constraint?.includes('idempotency_key')) {
+        // 并发冲突，重新查询已导入的批次
+        const existingBatches = await db
+          .select()
+          .from(importBatches)
+          .where(and(
+            eq(importBatches.idempotencyKey, data.idempotencyKey),
+            sql`${importBatches.status} <> 'reverted'`
+          ))
+          .limit(1);
+        
+        if (existingBatches.length > 0) {
+          const batch = existingBatches[0];
+          const importTime = new Date(batch.createdAt!);
+          const timeStr = importTime.toLocaleString('zh-CN', {
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          }).replace('月', '月').replace('日', '日');
+          
+          return NextResponse.json(
+            {
+              batchId: batch.id,
+              inserted: {
+                positions: 0,
+                cashFlows: 0,
+                message: `这个批次已经导入过（${timeStr}），没有重复写入`,
+              },
+              alreadyImported: true,
+            },
+            {
+              headers: {
+                'Cache-Control': 'no-store',
+              },
+            }
+          );
+        }
       }
-    );
+      
+      // 其他事务失败
+      console.error('Transaction failed:', txError);
+      return NextResponse.json(
+        { error: 'Transaction failed' },
+        { status: 500 }
+      );
+    }
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

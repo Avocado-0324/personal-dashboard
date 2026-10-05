@@ -113,22 +113,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 检查幂等键
+    // 检查幂等键（只对未撤销的批次）
     const db = getPoolDb();
     
     const existingBatches = await db
       .select()
       .from(importBatches)
-      .where(eq(importBatches.idempotencyKey, idempotencyKey))
+      .where(and(
+        eq(importBatches.idempotencyKey, idempotencyKey),
+        sql`${importBatches.status} <> 'reverted'`
+      ))
       .limit(1);
     
     if (existingBatches.length > 0 && existingBatches[0].status === 'committed') {
+      const batch = existingBatches[0];
+      const importTime = new Date(batch.createdAt!);
+      const timeStr = importTime.toLocaleString('zh-CN', {
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).replace('月', '月').replace('日', '日');
+      
       return NextResponse.json(
         {
-          imported: existingBatches[0].rowCount || 0,
+          imported: batch.rowCount || 0,
           errors: [],
           skipped: 0,
-          message: '文件已导入（幂等）',
+          message: `这个文件已经导入过（${timeStr}），没有重复写入`,
+          batchId: batch.id,
+          alreadyImported: true,
         },
         { headers: { 'Cache-Control': 'no-store' } }
       );
@@ -137,13 +151,6 @@ export async function POST(request: NextRequest) {
     try {
       // 事务开始
       await db.transaction(async (tx) => {
-        // 如果存在已撤销的批次，先删除（允许重试）
-        if (existingBatches.length > 0 && existingBatches[0].status === 'reverted') {
-          await tx
-            .delete(importBatches)
-            .where(eq(importBatches.id, existingBatches[0].id));
-        }
-        
         // 获取或创建账户
         const accountRecords = await tx
           .select()
@@ -243,8 +250,44 @@ export async function POST(request: NextRequest) {
         },
         { headers: { 'Cache-Control': 'no-store' } }
       );
-    } catch (txError) {
-      // 事务失败
+    } catch (txError: any) {
+      // 处理唯一约束冲突（并发导入）
+      if (txError?.code === '23505' && txError?.constraint?.includes('idempotency_key')) {
+        // 并发冲突，重新查询已导入的批次
+        const existingBatches = await db
+          .select()
+          .from(importBatches)
+          .where(and(
+            eq(importBatches.idempotencyKey, idempotencyKey),
+            sql`${importBatches.status} <> 'reverted'`
+          ))
+          .limit(1);
+        
+        if (existingBatches.length > 0) {
+          const batch = existingBatches[0];
+          const importTime = new Date(batch.createdAt!);
+          const timeStr = importTime.toLocaleString('zh-CN', {
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          }).replace('月', '月').replace('日', '日');
+          
+          return NextResponse.json(
+            {
+              imported: batch.rowCount || 0,
+              errors: [],
+              skipped: 0,
+              message: `这个文件已经导入过（${timeStr}），没有重复写入`,
+              batchId: batch.id,
+              alreadyImported: true,
+            },
+            { headers: { 'Cache-Control': 'no-store' } }
+          );
+        }
+      }
+      
+      // 其他事务失败
       console.error('Transaction failed:', txError);
       return NextResponse.json(
         {

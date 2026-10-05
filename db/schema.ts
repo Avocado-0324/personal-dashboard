@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, date, numeric, integer, timestamp, char } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, date, numeric, integer, timestamp, char, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 export const accounts = pgTable('accounts', {
@@ -61,9 +61,13 @@ export const cashFlows = pgTable('cash_flows', {
 export const importBatches = pgTable('import_batches', {
   id: uuid('id').primaryKey().defaultRandom(),
   source: text('source').notNull().$type<'csv' | 'screenshot'>(),
-  idempotencyKey: text('idempotency_key').notNull().unique(),
+  idempotencyKey: text('idempotency_key').notNull(),
   filename: text('filename'),
   rowCount: integer('row_count'),
   status: text('status').notNull().default('committed').$type<'committed' | 'reverted'>(),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => ({
+  idempotencyKeyUniqueNotReverted: uniqueIndex('import_batches_idempotency_key_unique_not_reverted')
+    .on(table.idempotencyKey)
+    .where(sql`${table.status} <> 'reverted'`),
+}));
