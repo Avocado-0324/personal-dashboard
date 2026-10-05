@@ -19,14 +19,14 @@ export async function POST(request: NextRequest) {
 
     if (!date || !direction || !amountJpy) {
       return NextResponse.json(
-        { error: 'date, direction, amountJpy が必要です' },
+        { error: '需要 date, direction, amountJpy' },
         { status: 400, headers: { 'Cache-Control': 'no-store' } }
       );
     }
 
     const db = getDb();
 
-    // アカウント取得
+    // 获取账户
     let accountId: string | null = null;
     if (accountName) {
       const accountRecords = await db
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Create cash flow error:', error);
     return NextResponse.json(
-      { error: '入出金作成に失敗しました' },
+      { error: '创建入出金失败' },
       { status: 500, headers: { 'Cache-Control': 'no-store' } }
     );
   }
@@ -91,7 +91,7 @@ export async function GET() {
   } catch (error) {
     console.error('Get cash flows error:', error);
     return NextResponse.json(
-      { error: '入出金取得に失敗しました' },
+      { error: '获取入出金失败' },
       { status: 500, headers: { 'Cache-Control': 'no-store' } }
     );
   }

@@ -42,42 +42,42 @@ export type ParsedCashFlow = {
 };
 
 /**
- * Shift_JIS バイナリから文字列にデコード
+ * Shift_JIS 二进制解码为字符串
  */
 export function decodeShiftJIS(buffer: ArrayBuffer): string {
   return iconv.decode(Buffer.from(buffer), 'shift_jis');
 }
 
 /**
- * CSV を行に分割（改行コード対応）
+ * CSV 按行分割（支持换行符）
  */
 export function splitCSVLines(text: string): string[] {
   return text.split(/\r?\n/).filter(line => line.trim());
 }
 
 /**
- * CSV 行をフィールドに分割（簡易実装、ダブルクォート内のカンマは未対応）
+ * CSV 行按字段分割（简易实现，不支持双引号内逗号）
  */
 export function splitCSVFields(line: string): string[] {
   return line.split(',').map(f => f.trim().replace(/^"|"$/g, ''));
 }
 
 /**
- * 千分位カンマを除去して数値文字列に変換
+ * 去除千分位逗号转为数值字符串
  */
 export function parseNumber(value: string): string {
   if (!value) return '0';
-  // 千分位カンマを除去
+  // 去除千分位逗号
   const cleaned = value.replace(/,/g, '');
-  // 数値チェック
+  // 数值检查
   if (isNaN(Number(cleaned))) {
-    throw new Error(`無効な数値: ${value}`);
+    throw new Error(`无效数值：${value}`);
   }
   return cleaned;
 }
 
 /**
- * 表頭行から列インデックスを検出
+ * 从表头行检测列索引
  */
 export function detectColumnIndexes(
   headers: string[],
@@ -99,7 +99,7 @@ export function detectColumnIndexes(
 }
 
 /**
- * SBI 持仓 CSV をパース
+ * SBI 持仓 CSV 解析
  */
 export function parseSBIPositions(csvText: string): {
   positions: ParsedPosition[];
@@ -109,7 +109,7 @@ export function parseSBIPositions(csvText: string): {
   if (lines.length < 2) {
     return {
       positions: [],
-      errors: [{ row: 1, message: 'CSV が空か表頭行のみです' }],
+      errors: [{ row: 1, message: 'CSV 为空或只有表头' }],
     };
   }
 
@@ -117,7 +117,7 @@ export function parseSBIPositions(csvText: string): {
   const headers = splitCSVFields(headerLine);
   const indexes = detectColumnIndexes(headers, SBI_HEADERS);
 
-  // 必須列チェック
+  // 必需列检查
   const required = ['SYMBOL', 'NAME', 'QUANTITY', 'PRICE'];
   const missing = required.filter(k => indexes[k] === undefined);
   if (missing.length > 0) {
@@ -125,7 +125,7 @@ export function parseSBIPositions(csvText: string): {
       positions: [],
       errors: [{
         row: 1,
-        message: `必須列が見つかりません: ${missing.join(', ')}`,
+        message: `缺少必需列：${missing.join(', ')}`,
       }],
     };
   }
@@ -151,7 +151,7 @@ export function parseSBIPositions(csvText: string): {
       const currency = fields[indexes.CURRENCY] || 'JPY';
 
       if (!symbol || !name) {
-        errors.push({ row, message: '銘柄コードまたは銘柄名が空です' });
+        errors.push({ row, message: '证券代码或名称为空' });
         continue;
       }
 
@@ -167,7 +167,7 @@ export function parseSBIPositions(csvText: string): {
     } catch (error) {
       errors.push({
         row,
-        message: error instanceof Error ? error.message : '行の解析に失敗',
+        message: error instanceof Error ? error.message : '行解析失败',
       });
     }
   }
@@ -176,7 +176,7 @@ export function parseSBIPositions(csvText: string): {
 }
 
 /**
- * SBI 入出金 CSV をパース
+ * SBI 入出金 CSV 解析
  */
 export function parseSBICashFlows(csvText: string): {
   cashFlows: ParsedCashFlow[];
@@ -186,7 +186,7 @@ export function parseSBICashFlows(csvText: string): {
   if (lines.length < 2) {
     return {
       cashFlows: [],
-      errors: [{ row: 1, message: 'CSV が空か表頭行のみです' }],
+      errors: [{ row: 1, message: 'CSV 为空或只有表头' }],
     };
   }
 
@@ -201,7 +201,7 @@ export function parseSBICashFlows(csvText: string): {
       cashFlows: [],
       errors: [{
         row: 1,
-        message: `必須列が見つかりません: ${missing.join(', ')}`,
+        message: `缺少必需列：${missing.join(', ')}`,
       }],
     };
   }
@@ -221,7 +221,7 @@ export function parseSBICashFlows(csvText: string): {
       const directionStr = fields[indexes.DIRECTION] || '';
       const amountJpy = parseNumber(fields[indexes.AMOUNT] || '0');
 
-      // 日付フォーマット変換（例：2024/01/01 → 2024-01-01）
+      // 日期格式转换（例：2024/01/01 → 2024-01-01）
       const date = dateStr.replace(/\//g, '-');
       
       // 方向判定
@@ -231,7 +231,7 @@ export function parseSBICashFlows(csvText: string): {
       } else if (directionStr.includes('出金') || directionStr.includes('引出')) {
         direction = 'withdrawal';
       } else {
-        errors.push({ row, message: `不明な入出金区分: ${directionStr}` });
+        errors.push({ row, message: `未知入出金类型：${directionStr}` });
         continue;
       }
 
@@ -244,7 +244,7 @@ export function parseSBICashFlows(csvText: string): {
     } catch (error) {
       errors.push({
         row,
-        message: error instanceof Error ? error.message : '行の解析に失敗',
+        message: error instanceof Error ? error.message : '行解析失败',
       });
     }
   }

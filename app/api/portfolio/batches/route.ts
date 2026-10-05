@@ -27,7 +27,7 @@ export async function GET() {
   } catch (error) {
     console.error('Get batches error:', error);
     return NextResponse.json(
-      { error: 'バッチ取得に失敗しました' },
+      { error: '获取批次失败' },
       { status: 500, headers: { 'Cache-Control': 'no-store' } }
     );
   }

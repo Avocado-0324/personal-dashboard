@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
 
     if (!name || !type) {
       return NextResponse.json(
-        { error: 'name と type が必要です' },
+        { error: '需要 name 和 type' },
         { status: 400, headers: { 'Cache-Control': 'no-store' } }
       );
     }
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Create account error:', error);
     return NextResponse.json(
-      { error: 'アカウント作成に失敗しました' },
+      { error: '创建账户失败' },
       { status: 500, headers: { 'Cache-Control': 'no-store' } }
     );
   }
@@ -61,7 +61,7 @@ export async function GET() {
   } catch (error) {
     console.error('Get accounts error:', error);
     return NextResponse.json(
-      { error: 'アカウント取得に失敗しました' },
+      { error: '获取账户失败' },
       { status: 500, headers: { 'Cache-Control': 'no-store' } }
     );
   }

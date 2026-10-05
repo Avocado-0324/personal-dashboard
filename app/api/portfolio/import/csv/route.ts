@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   try {
     if (!isDatabaseConfigured()) {
       return NextResponse.json(
-        { error: 'データベース未配置' },
+        { error: '数据库未配置' },
         { status: 500, headers: { 'Cache-Control': 'no-store' } }
       );
     }
@@ -27,38 +27,38 @@ export async function POST(request: NextRequest) {
 
     if (!file) {
       return NextResponse.json(
-        { error: 'ファイルが指定されていません' },
+        { error: '未指定文件' },
         { status: 400, headers: { 'Cache-Control': 'no-store' } }
       );
     }
 
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
-        { error: 'ファイルサイズが 1MB を超えています' },
+        { error: '文件大小超过 1MB' },
         { status: 400, headers: { 'Cache-Control': 'no-store' } }
       );
     }
 
     if (!asOf || !accountName) {
       return NextResponse.json(
-        { error: 'asOf と accountName が必要です' },
+        { error: '需要 asOf 和 accountName' },
         { status: 400, headers: { 'Cache-Control': 'no-store' } }
       );
     }
 
-    // Shift_JIS デコード
+    // Shift_JIS 解码
     const buffer = await file.arrayBuffer();
     const csvText = decodeShiftJIS(buffer);
 
-    // パース
+    // 解析
     const { positions: parsedPositions, errors } = parseSBIPositions(csvText);
 
     if (dryRun) {
-      // dry-run：プレビューのみ
+      // dry-run：仅预览
       return NextResponse.json(
         {
           preview: parsedPositions.map((p, i) => ({
-            row: i + 2, // ヘッダーの次から
+            row: i + 2, // 表头之后
             symbol: p.symbol,
             name: p.name,
             quantity: p.quantity,
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // エラーがあれば中断
+    // 有错误则中断
     if (errors.length > 0) {
       return NextResponse.json(
         { errors, imported: 0 },
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
     try {
       // 事务开始
       await db.transaction(async (tx) => {
-        // アカウント取得または作成
+        // 获取或创建账户
         const accountRecords = await tx
           .select()
           .from(accounts)
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
           accountId = accountRecords[0].id;
         }
 
-        // バッチ作成
+        // 创建批次
         const [batch] = await tx
           .insert(importBatches)
           .values({
@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
           })
           .returning();
 
-        // スナップショット作成
+        // 创建快照
         const [snapshot] = await tx
           .insert(snapshots)
           .values({
@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
 
         // 写入各持仓
         for (const pos of parsedPositions) {
-          // Instrument 取得または作成
+          // 获取或创建 Instrument
           let instrumentRecords = await tx
             .select()
             .from(instruments)
@@ -190,7 +190,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('CSV import error:', error);
     return NextResponse.json(
-      { error: 'インポートに失敗しました' },
+      { error: '导入失败' },
       { status: 500, headers: { 'Cache-Control': 'no-store' } }
     );
   }

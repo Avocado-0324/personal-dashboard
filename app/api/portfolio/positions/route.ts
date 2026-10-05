@@ -19,14 +19,14 @@ export async function POST(request: NextRequest) {
 
     if (!asOf || !accountName || !positionsData || positionsData.length === 0) {
       return NextResponse.json(
-        { error: 'asOf, accountName, positions が必要です' },
+        { error: '需要 asOf, accountName, positions' },
         { status: 400, headers: { 'Cache-Control': 'no-store' } }
       );
     }
 
     const db = getDb();
 
-    // アカウント取得または作成
+    // 获取或创建账户
     const accountRecords = await db
       .select()
       .from(accounts)
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
       accountId = accountRecords[0].id;
     }
 
-    // スナップショット作成
+    // 创建快照
     const [snapshot] = await db
       .insert(snapshots)
       .values({
@@ -56,9 +56,9 @@ export async function POST(request: NextRequest) {
       })
       .returning();
 
-    // 各ポジション作成
+    // 创建各持仓
     for (const pos of positionsData) {
-      // Instrument 取得または作成
+      // 获取或创建 Instrument
       const instrumentRecords = await db
         .select()
         .from(instruments)
@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Create positions error:', error);
     return NextResponse.json(
-      { error: 'ポジション作成に失敗しました' },
+      { error: '创建持仓失败' },
       { status: 500, headers: { 'Cache-Control': 'no-store' } }
     );
   }

@@ -65,7 +65,7 @@ export async function GET() {
   } catch (error) {
     console.error('Get data error:', error);
     return NextResponse.json(
-      { error: 'データ取得に失敗しました' },
+      { error: '获取数据失败' },
       { status: 500, headers: { 'Cache-Control': 'no-store' } }
     );
   }

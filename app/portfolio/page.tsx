@@ -203,7 +203,7 @@ export default function PortfolioPage() {
       }
     } catch (error) {
       console.error('CSV dry-run failed:', error);
-      alert('CSV プレビューに失敗しました');
+      alert('CSV 预览失败');
     }
   }
 
@@ -570,7 +570,7 @@ export default function PortfolioPage() {
                   </div>
                   
                   {showNewCashFlowForm && (
-                    <div className="mb-4 p-4 bg-gray-800 rounded-lg">
+                    <div className="mb-4 p-4 bg-tile rounded-lg">
                       <div className="grid grid-cols-2 gap-3">
                         <input
                           type="date"
@@ -665,7 +665,7 @@ export default function PortfolioPage() {
                   {data?.snapshots && data.snapshots.length > 0 ? (
                     <div className="space-y-3">
                       {data.snapshots.map((snapshot, i) => (
-                        <div key={i} className="p-3 bg-gray-800 rounded">
+                        <div key={i} className="p-3 bg-tile rounded">
                           <div className="flex justify-between items-center">
                             <div>
                               <p className="text-foreground">{snapshot.asOf}</p>
@@ -689,7 +689,7 @@ export default function PortfolioPage() {
                   {batches.length > 0 ? (
                     <div className="space-y-3">
                       {batches.map((batch) => (
-                        <div key={batch.id} className="p-4 bg-gray-800 rounded">
+                        <div key={batch.id} className="p-4 bg-tile rounded">
                           <div className="flex justify-between items-start">
                             <div>
                               <p className="text-foreground">{batch.filename || '手动录入'}</p>
@@ -764,16 +764,16 @@ export default function PortfolioPage() {
                     disabled={!csvFile}
                     className="w-full px-4 py-2 bg-tile text-muted rounded hover:bg-card-border disabled:opacity-50"
                   >
-                    プレビュー
+                    预览
                   </button>
                   
                   {csvPreview && (
-                    <div className="p-3 bg-gray-800 rounded text-xs">
+                    <div className="p-3 bg-tile rounded text-xs">
                       <p className="text-foreground mb-2">{csvPreview.length} 行数据</p>
                       <button
                         onClick={handleCSVImport}
                         disabled={importing || csvErrors.length > 0}
-                        className="w-full px-4 py-2 bg-cyan-500 text-white rounded hover:bg-cyan-600 disabled:opacity-50"
+                        className="w-full px-4 py-2 bg-accent text-background rounded hover:opacity-90 disabled:opacity-50"
                       >
                         {importing ? '导入中...' : '导入'}
                       </button>
@@ -828,7 +828,7 @@ export default function PortfolioPage() {
                     <div className="flex gap-2">
                       <button
                         onClick={handleCreateAccount}
-                        className="flex-1 px-4 py-2 bg-cyan-500 text-white rounded hover:bg-cyan-600"
+                        className="flex-1 px-4 py-2 bg-accent text-background rounded hover:opacity-90"
                       >
                         保存
                       </button>
@@ -843,7 +843,7 @@ export default function PortfolioPage() {
                 ) : (
                   <button
                     onClick={() => setShowNewAccountForm(true)}
-                    className="w-full px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors"
+                    className="w-full px-4 py-2 bg-accent text-background rounded-lg hover:opacity-90 transition-colors"
                   >
                     ＋ 新增账户
                   </button>
