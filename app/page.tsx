@@ -6,6 +6,7 @@ import { getUserSettingsFromCookie } from '@/lib/user-settings';
 import { ModuleCard } from './components/ModuleCard';
 import { getGmailStatus } from '@/lib/connectors/gmail';
 import { getGithubStatus } from '@/lib/connectors/github';
+import { ThemeToggle } from './components/ThemeToggle';
 
 initializeModules();
 
@@ -36,6 +37,7 @@ export default async function HomePage() {
   const moduleResults = await Promise.allSettled(
     enabledModules.map(async (module) => ({
       id: module.manifest.id,
+      manifest: module.manifest,
       result: await module.load(moduleContext),
       Card: module.Card,
     }))
@@ -45,51 +47,135 @@ export default async function HomePage() {
     .filter((r) => r.status === 'fulfilled')
     .map((r) => (r as PromiseFulfilledResult<any>).value);
 
-  return (
-    <div className="min-h-screen bg-gray-100">
-      {/* 顶栏 */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">我的聚合</h1>
-          <Link
-            href="/settings"
-            className="text-sm text-blue-600 hover:text-blue-800 px-4 py-2 rounded hover:bg-blue-50"
-          >
-            设置
-          </Link>
-        </div>
-      </header>
+  const leftModules = modules
+    .filter(m => m.manifest.layout.column === 'left')
+    .sort((a, b) => a.manifest.layout.priority - b.manifest.layout.priority);
+  
+  const rightModules = modules
+    .filter(m => m.manifest.layout.column === 'right')
+    .sort((a, b) => a.manifest.layout.priority - b.manifest.layout.priority);
 
-      {/* 主内容区 */}
-      <main className="max-w-4xl mx-auto px-4 py-8">
-        {modules.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-8 text-center">
-            <p className="text-gray-500 mb-4">未启用任何模块</p>
+  const now = new Date();
+  const hour = now.getHours();
+  const greeting = hour < 12 ? '上午好' : hour < 18 ? '下午好' : '晚上好';
+  const dateStr = now.toLocaleDateString('zh-CN', { 
+    month: 'numeric', 
+    day: 'numeric', 
+    weekday: 'long' 
+  });
+
+  const mailModule = modules.find(m => m.id === 'mail-todos');
+  const githubModule = modules.find(m => m.id === 'github-activity');
+  
+  let unreadCount = 0;
+  let githubActivityCount = 0;
+  
+  if (mailModule?.result.status === 'ok') {
+    unreadCount = mailModule.result.data.totalCount || 0;
+  }
+  
+  if (githubModule?.result.status === 'ok') {
+    githubActivityCount = githubModule.result.data.summary.commits + 
+                         githubModule.result.data.summary.pullRequests + 
+                         githubModule.result.data.summary.reviews;
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="max-w-[1200px] mx-auto px-8 py-7">
+        {/* 顶部导航 */}
+        <nav className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent via-up to-[#f472b6]" />
+            <h1 className="text-[17px] font-bold">我的聚合</h1>
+          </div>
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
             <Link
               href="/settings"
-              className="inline-block px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              className="px-4 py-2 rounded-full text-sm font-medium
+                         bg-card-bg border border-card-border text-foreground
+                         hover:bg-tile transition-colors"
+            >
+              ⚙ 设置
+            </Link>
+            <div className="w-9 h-9 rounded-full bg-foreground text-background
+                            flex items-center justify-center font-bold text-sm">
+              Q
+            </div>
+          </div>
+        </nav>
+
+        {/* 概览区 Hero */}
+        <div className="rounded-hero bg-gradient-to-br from-hero-from to-hero-to
+                        border border-card-border p-7 mb-5 flex justify-between items-end">
+          <div>
+            <div className="text-muted text-sm mb-1">{dateStr}</div>
+            <h2 className="text-[28px] font-bold mb-2 tracking-tight">{greeting}，Qinou</h2>
+            <div className="text-sm text-muted">
+              {unreadCount > 0 && (
+                <>
+                  今天有 <span className="text-accent font-semibold">{unreadCount}</span> 封未读待处理
+                </>
+              )}
+              {unreadCount > 0 && githubActivityCount > 0 && '，'}
+              {githubActivityCount > 0 && (
+                <>
+                  GitHub 本周 <span className="text-accent font-semibold">{githubActivityCount}</span> 次活动
+                </>
+              )}
+              {!unreadCount && !githubActivityCount && '一切都很平静'}
+            </div>
+          </div>
+        </div>
+
+        {modules.length === 0 ? (
+          <div className="bg-card-bg border border-card-border rounded-card p-8 text-center">
+            <p className="text-muted mb-4">未启用任何模块</p>
+            <Link
+              href="/settings"
+              className="inline-block px-6 py-2 bg-accent text-background rounded-lg
+                         hover:opacity-90 transition font-medium"
             >
               前往设置
             </Link>
           </div>
         ) : (
-          <div className="space-y-6">
-            {modules.map((module) => (
-              <ModuleCard
-                key={module.id}
-                moduleId={module.id}
-                initialResult={module.result}
-                Card={module.Card}
-              />
-            ))}
-          </div>
-        )}
-      </main>
+          <>
+            {/* 两栏布局（桌面） / 单栏（移动） */}
+            <div className="grid grid-cols-1 lg:grid-cols-[1.35fr_1fr] gap-5">
+              {/* 左栏 */}
+              <div className="flex flex-col gap-5">
+                {leftModules.map((module) => (
+                  <ModuleCard
+                    key={module.id}
+                    moduleId={module.id}
+                    initialResult={module.result}
+                    Card={module.Card}
+                  />
+                ))}
+              </div>
 
-      {/* 页脚 */}
-      <footer className="max-w-4xl mx-auto px-4 py-8 text-center text-sm text-gray-500">
-        <p>个人聚合页 v0.1 · M0 脚手架</p>
-      </footer>
+              {/* 右栏 */}
+              <div className="flex flex-col gap-5">
+                {rightModules.map((module) => (
+                  <ModuleCard
+                    key={module.id}
+                    moduleId={module.id}
+                    initialResult={module.result}
+                    Card={module.Card}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* 页脚 */}
+            <footer className="mt-10 text-center text-xs text-muted">
+              模块可在设置中开关
+            </footer>
+          </>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,0 +1,115 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><style>*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,"Noto Sans CJK SC","Noto Sans CJK JP",sans-serif;-webkit-font-smoothing:antialiased;font-size:14px}
+.num{font-family:"Geist Mono","IBM Plex Mono",monospace;font-feature-settings:"tnum"}
+.wrap{max-width:1200px;margin:0 auto;padding:28px 32px 40px}
+.nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
+.logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px}
+.logo i{width:28px;height:28px;border-radius:9px;display:inline-block}
+.navr{display:flex;gap:10px;align-items:center}
+.pill{padding:7px 14px;border-radius:999px;font-size:13px}
+.hero{border-radius:24px;padding:28px 32px;display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:20px}
+.hero h1{font-size:28px;font-weight:700;letter-spacing:-.02em}
+.hero .sub{margin-top:6px;font-size:14px}
+.kpis{display:flex;gap:36px;text-align:right}
+.kpi .l{font-size:12px;margin-bottom:4px}
+.kpi .v{font-size:26px;font-weight:600;letter-spacing:-.02em}
+.grid{display:grid;grid-template-columns:1.35fr 1fr;gap:20px}
+.col{display:flex;flex-direction:column;gap:20px}
+.card{border-radius:22px;padding:22px 24px}
+.ch{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.ct{display:flex;align-items:center;gap:10px;font-weight:650;font-size:16px}
+.ico{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;font-size:15px}
+.badge{font-size:11.5px;padding:3px 9px;border-radius:999px;font-weight:600}
+.link{font-size:13px;font-weight:500}
+.mail{display:flex;gap:12px;padding:12px 4px;align-items:flex-start}
+.av{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:13px;flex:none}
+.mail .t{font-weight:600;font-size:14px;display:flex;justify-content:space-between}
+.mail .s{font-size:13px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:460px}
+.tip{padding:14px 16px;border-radius:16px;margin-top:10px}
+.tip .t{font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.tip .s{font-size:13px;margin-top:6px;line-height:1.6}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.stat{border-radius:14px;padding:12px 14px}
+.stat .v{font-size:22px;font-weight:600}
+.stat .l{font-size:12px;margin-top:2px}
+.heat{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:12px}
+.heat span{height:22px;border-radius:6px}
+.act{display:flex;justify-content:space-between;font-size:13px;padding:8px 0}
+.pf-top{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px}
+.pf-total{font-size:30px;font-weight:600;letter-spacing:-.02em}
+.pf-row{display:flex;gap:18px;margin-top:6px;font-size:13px}
+.bar{display:flex;height:10px;border-radius:999px;overflow:hidden;margin:6px 0 12px}
+.legend{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;font-size:12.5px}
+.legend div{display:flex;justify-content:space-between}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+.foot{font-size:11.5px;margin-top:18px;text-align:center}
+.demo{position:fixed;top:12px;right:12px;font-size:11px;padding:4px 10px;border-radius:999px;background:#f59e0b;color:#111;font-weight:700}
+
+:root{--c1:#22d3ee;--c2:#a3e635;--c3:#f472b6;--c4:#475569}
+body{background:#0a0b0f;color:#e5e7eb}
+body:before{content:"";position:fixed;inset:0;background:radial-gradient(700px 380px at 85% -5%,rgba(34,211,238,.14),transparent 60%),radial-gradient(600px 400px at 0 100%,rgba(163,230,53,.08),transparent 60%);pointer-events:none}
+.wrap{position:relative}
+.muted{color:#8b93a3}.acc{color:#22d3ee}.up{color:#a3e635}
+.lg{background:conic-gradient(from 200deg,#22d3ee,#a3e635,#f472b6,#22d3ee)}
+.chip{background:#14161c;border:1px solid #23262f;color:#cbd5e1}
+.me{background:#e5e7eb;color:#0a0b0f}
+.hero{background:linear-gradient(135deg,#12141a,#0f1116);border:1px solid #1f232c}
+.card{background:#111318;border:1px solid #1f232c}
+.tile{background:#171a21}.sep{border-bottom:1px solid #1c1f27}
+.i1{background:rgba(34,211,238,.12);color:#22d3ee}.i2{background:rgba(244,114,182,.12);color:#f472b6}.i3{background:rgba(163,230,53,.12);color:#a3e635}.i4{background:rgba(167,139,250,.14);color:#a78bfa}
+.b1{background:#22d3ee;color:#0a0b0f}.b2{background:rgba(251,191,36,.15);color:#fbbf24}.b3{background:rgba(167,139,250,.15);color:#c4b5fd}.b4{background:rgba(244,114,182,.15);color:#f9a8d4}
+.a1{background:#2a1416;color:#f87171}.a2{background:#1e1b2e;color:#a78bfa}.a3{background:#1f232c;color:#e5e7eb}
+.h0{background:#171a21}.h1{background:#1f3a2a}.h2{background:#3f6212}.h3{background:#65a30d}.h4{background:#a3e635}
+.pf-total,.kpi .v{text-shadow:0 0 24px rgba(34,211,238,.15)}
+</style><body>
+<div class="demo">示例数据</div>
+<div class="wrap">
+ <div class="nav">
+  <div class="logo"><i class="lg"></i>我的聚合</div>
+  <div class="navr"><span class="pill chip">☾ 主题</span><span class="pill chip">⚙ 设置</span><span class="av me">Q</span></div>
+ </div>
+ <div class="hero">
+  <div><div class="muted sub0">10月5日 星期一</div><h1>下午好，Qinou</h1>
+   <div class="sub muted">今天有 <b class="acc">3</b> 封未读待处理，GitHub 本周 <b class="acc">12</b> 次活动</div></div>
+  <div class="kpis">
+   <div class="kpi"><div class="l muted">总资产</div><div class="v num">¥12,480,300</div></div>
+   <div class="kpi"><div class="l muted">累计盈亏</div><div class="v num up">+¥1,862,400</div></div>
+   <div class="kpi"><div class="l muted">年化 XIRR</div><div class="v num up">8.4%</div></div>
+  </div>
+ </div>
+ <div class="grid">
+  <div class="col">
+   <div class="card">
+    <div class="ch"><div class="ct"><span class="ico i1">✉</span>邮件待办 <span class="badge b1 num">3</span></div><span class="link acc">打开 Gmail ↗</span></div>
+    <div class="mail sep"><span class="av a1">S</span><div style="flex:1"><div class="t">SBI証券 <span class="muted num" style="font-weight:400;font-size:12px">10:42</span></div><div class="s muted">【重要】NISA 口座の年間投資枠に関するお知らせ</div></div></div>
+    <div class="mail sep"><span class="av a2">A</span><div style="flex:1"><div class="t">Accenture HR <span class="badge b2">需回复</span></div><div class="s muted">育児休業 開始前の手続きについて（ご確認ください）</div></div></div>
+    <div class="mail"><span class="av a3">G</span><div style="flex:1"><div class="t">GitHub <span class="muted num" style="font-weight:400;font-size:12px">昨天</span></div><div class="s muted">[personal-dashboard] PR #5 merged: Fix dual OAuth</div></div></div>
+   </div>
+   <div class="card">
+    <div class="ch"><div class="ct"><span class="ico i3">⌥</span>GitHub 活跃度 <span class="muted" style="font-weight:400;font-size:13px">最近 7 天</span></div><span class="link acc">刷新</span></div>
+    <div class="stats"><div class="stat tile"><div class="v num">23</div><div class="l muted">提交</div></div><div class="stat tile"><div class="v num">5</div><div class="l muted">PR</div></div><div class="stat tile"><div class="v num">19</div><div class="l muted">审查</div></div></div>
+    <div class="heat"><span class="h1"></span><span class="h3"></span><span class="h3"></span><span class="h1"></span><span class="h1"></span><span class="h3"></span><span class="h2"></span><span class="h4"></span><span class="h3"></span><span class="h0"></span><span class="h3"></span><span class="h0"></span><span class="h2"></span><span class="h1"></span></div>
+    <div class="act sep"><span>合并 PR #5 · Fix dual OAuth</span><span class="muted">2 小时前</span></div>
+    <div class="act"><span>推送了 4 个提交 · personal-dashboard</span><span class="muted">昨天</span></div>
+   </div>
+  </div>
+  <div class="col">
+   <div class="card">
+    <div class="ch"><div class="ct"><span class="ico i4">◔</span>持仓</div><span class="link acc">＋ 录入 · 明细 →</span></div>
+    <div class="muted" style="font-size:12px;margin-bottom:8px">10/04 快照 · 前 3 大持仓</div>
+    <div class="act sep"><span>eMAXIS Slim 全世界株式 <span class="muted" style="font-size:12px">NISA 积立</span></span><span class="num">¥4,210,000 <span class="up">+21.3%</span></span></div>
+    <div class="act sep"><span>NVIDIA (NVDA) <span class="muted" style="font-size:12px">NISA 成长</span></span><span class="num">¥2,035,600 <span class="up">+48.2%</span></span></div>
+    <div class="act" style="margin-bottom:10px"><span>トヨタ自動車 (7203) <span class="muted" style="font-size:12px">特定</span></span><span class="num">¥1,128,000 <span style="color:#e11d48">-3.1%</span></span></div>
+    <div class="muted" style="font-size:12px">按账户</div>
+    <div class="bar"><span style="width:46%;background:var(--c1)"></span><span style="width:22%;background:var(--c2)"></span><span style="width:20%;background:var(--c3)"></span><span style="width:12%;background:var(--c4)"></span></div>
+    <div class="legend"><div><span><i class="dot" style="background:var(--c1)"></i>NISA 成长</span><span class="num">46%</span></div><div><span><i class="dot" style="background:var(--c2)"></i>NISA 积立</span><span class="num">22%</span></div><div><span><i class="dot" style="background:var(--c3)"></i>特定口座</span><span class="num">20%</span></div><div><span><i class="dot" style="background:var(--c4)"></i>现金</span><span class="num">12%</span></div></div>
+   </div>
+   <div class="card">
+    <div class="ch"><div class="ct"><span class="ico i2">✿</span>育儿 Tips <span class="muted" style="font-weight:400;font-size:13px">今日</span></div><span class="link acc">换一批</span></div>
+    <div class="tip tile"><div class="t">建立规律的睡眠时间 <span class="badge b3">睡眠</span></div><div class="s muted">每天在相同时间哄睡，帮助宝宝建立生物钟，提高睡眠质量。</div></div>
+    <div class="tip tile"><div class="t">亲子互动促进依恋 <span class="badge b4">情绪</span></div><div class="s muted">通过眼神交流、微笑和拥抱，帮助宝宝建立安全依恋关系。</div></div>
+   </div>
+  </div>
+ </div>
+ <div class="foot muted">模块可在设置中开关 · 持仓默认关闭</div>
+</div></body></html>

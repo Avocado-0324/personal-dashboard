@@ -11,7 +11,7 @@ export type ModuleManifest = {
   defaultEnabled: boolean;
   requires: ConnectorId[];
   configKeys: string[];
-  layout: { minWidth: 'full'; priority: number };
+  layout: { column: 'left' | 'right'; priority: number };
 };
 
 export type UserSettings = {

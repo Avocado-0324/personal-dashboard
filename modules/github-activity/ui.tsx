@@ -16,14 +16,6 @@ const typeLabels = {
   other: '其他',
 };
 
-const typeColors = {
-  commit: 'bg-green-100 text-green-800',
-  pr: 'bg-blue-100 text-blue-800',
-  review: 'bg-purple-100 text-purple-800',
-  issue: 'bg-yellow-100 text-yellow-800',
-  other: 'bg-gray-100 text-gray-800',
-};
-
 function formatRelativeTime(isoString: string): string {
   const now = Date.now();
   const date = new Date(isoString);
@@ -32,20 +24,38 @@ function formatRelativeTime(isoString: string): string {
   const days = Math.floor(diff / 86400000);
 
   if (hours < 24) return `${hours}小时前`;
+  if (days === 1) return '昨天';
   return `${days}天前`;
+}
+
+function getHeatColor(count: number): string {
+  if (count === 0) return 'bg-tile';
+  if (count <= 2) return 'bg-lime-950/60';
+  if (count <= 5) return 'bg-lime-800/50';
+  if (count <= 8) return 'bg-lime-600/60';
+  return 'bg-up';
 }
 
 export function Card({ result, onRefresh }: Props) {
   if (result.status === 'disconnected') {
     return (
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-bold mb-4">GitHub 活跃度</h2>
-        <div className="text-gray-500 text-center py-8">
-          <p>未连接 GitHub</p>
-          <p className="text-sm mt-2">请在设置中连接您的 GitHub 账户</p>
+      <div className="bg-card-bg border border-card-border rounded-card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-[30px] h-[30px] rounded-lg bg-up/10 text-up
+                            flex items-center justify-center text-[15px]">
+              ⌥
+            </div>
+            <h2 className="text-base font-semibold">GitHub 活跃度</h2>
+          </div>
+        </div>
+        <div className="text-muted text-center py-8">
+          <p className="mb-2">未连接 GitHub</p>
+          <p className="text-sm mb-4">请在设置中连接您的 GitHub 账户</p>
           <a
             href="/settings"
-            className="inline-block mt-4 px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+            className="inline-block px-6 py-2 bg-accent text-background rounded-lg
+                       hover:opacity-90 transition font-medium"
           >
             去连接
           </a>
@@ -56,9 +66,17 @@ export function Card({ result, onRefresh }: Props) {
 
   if (result.status === 'unconfigured') {
     return (
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-bold mb-4">GitHub 活跃度</h2>
-        <div className="text-gray-500 text-center py-8">
+      <div className="bg-card-bg border border-card-border rounded-card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-[30px] h-[30px] rounded-lg bg-up/10 text-up
+                            flex items-center justify-center text-[15px]">
+              ⌥
+            </div>
+            <h2 className="text-base font-semibold">GitHub 活跃度</h2>
+          </div>
+        </div>
+        <div className="text-muted text-center py-8">
           <p>需要配置</p>
         </div>
       </div>
@@ -67,13 +85,22 @@ export function Card({ result, onRefresh }: Props) {
 
   if (result.status === 'error') {
     return (
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-bold mb-4">GitHub 活跃度</h2>
-        <div className="text-red-500 text-center py-8">
-          <p>加载失败：{result.message}</p>
+      <div className="bg-card-bg border border-card-border rounded-card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-[30px] h-[30px] rounded-lg bg-up/10 text-up
+                            flex items-center justify-center text-[15px]">
+              ⌥
+            </div>
+            <h2 className="text-base font-semibold">GitHub 活跃度</h2>
+          </div>
+        </div>
+        <div className="text-center py-8">
+          <p className="text-down mb-4">加载失败：{result.message}</p>
           <button
             onClick={onRefresh}
-            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            className="px-4 py-2 bg-accent text-background rounded-lg
+                       hover:opacity-90 transition font-medium"
           >
             重试
           </button>
@@ -84,9 +111,17 @@ export function Card({ result, onRefresh }: Props) {
 
   if (result.status === 'empty') {
     return (
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-bold mb-4">GitHub 活跃度</h2>
-        <div className="text-gray-500 text-center py-8">
+      <div className="bg-card-bg border border-card-border rounded-card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-[30px] h-[30px] rounded-lg bg-up/10 text-up
+                            flex items-center justify-center text-[15px]">
+              ⌥
+            </div>
+            <h2 className="text-base font-semibold">GitHub 活跃度</h2>
+          </div>
+        </div>
+        <div className="text-muted text-center py-8">
           <p>最近7天无活动</p>
           {result.hint && <p className="text-sm mt-2">{result.hint}</p>}
         </div>
@@ -100,61 +135,78 @@ export function Card({ result, onRefresh }: Props) {
 
   const { data } = result;
 
+  const heatMap = Array(14).fill(0);
+  data.items.forEach(item => {
+    const daysSince = Math.floor((Date.now() - new Date(item.at).getTime()) / 86400000);
+    if (daysSince < 14) {
+      heatMap[13 - daysSince]++;
+    }
+  });
+
   return (
-    <div className="bg-white rounded-lg shadow p-6">
+    <div className="bg-card-bg border border-card-border rounded-card p-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold">GitHub 活跃度</h2>
+        <div className="flex items-center gap-3">
+          <div className="w-[30px] h-[30px] rounded-lg bg-up/10 text-up
+                          flex items-center justify-center text-[15px]">
+            ⌥
+          </div>
+          <h2 className="text-base font-semibold">GitHub 活跃度</h2>
+          <span className="text-[13px] text-muted font-normal">最近 7 天</span>
+        </div>
         <button
           onClick={onRefresh}
-          className="text-sm text-blue-600 hover:text-blue-800"
+          className="text-[13px] font-medium text-accent hover:underline"
         >
           刷新
         </button>
       </div>
 
-      <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-        <div className="text-sm text-gray-600 mb-2">
-          最近 {data.windowDays} 天 · @{data.login}
+      <div className="grid grid-cols-3 gap-2.5 mb-3.5">
+        <div className="bg-tile rounded-[14px] px-3.5 py-3">
+          <div className="text-[22px] font-semibold font-feature-tnum">{data.summary.commits}</div>
+          <div className="text-xs text-muted mt-0.5">提交</div>
         </div>
-        <div className="flex gap-6">
-          <div className="flex items-center gap-2">
-            <span className="text-2xl font-bold text-green-600">{data.summary.commits}</span>
-            <span className="text-sm text-gray-600">次提交</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-2xl font-bold text-blue-600">{data.summary.pullRequests}</span>
-            <span className="text-sm text-gray-600">个 PR</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-2xl font-bold text-purple-600">{data.summary.reviews}</span>
-            <span className="text-sm text-gray-600">次审查</span>
-          </div>
+        <div className="bg-tile rounded-[14px] px-3.5 py-3">
+          <div className="text-[22px] font-semibold font-feature-tnum">{data.summary.pullRequests}</div>
+          <div className="text-xs text-muted mt-0.5">PR</div>
+        </div>
+        <div className="bg-tile rounded-[14px] px-3.5 py-3">
+          <div className="text-[22px] font-semibold font-feature-tnum">{data.summary.reviews}</div>
+          <div className="text-xs text-muted mt-0.5">审查</div>
         </div>
       </div>
 
-      <div className="space-y-3">
-        {data.items.map((item) => (
+      <div className="grid grid-cols-7 gap-1.5 mb-3">
+        {heatMap.map((count, idx) => (
+          <div
+            key={idx}
+            className={`h-[22px] rounded-md ${getHeatColor(count)}`}
+            title={`${count} 次活动`}
+          />
+        ))}
+      </div>
+
+      <div className="space-y-0">
+        {data.items.slice(0, 2).map((item, idx) => (
           <a
             key={item.id}
             href={item.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="block p-3 border border-gray-200 rounded hover:bg-gray-50 transition"
+            className={`flex justify-between py-2 px-0 hover:text-accent transition
+                        ${idx === 0 ? 'border-b border-card-border' : ''}`}
           >
-            <div className="flex items-start justify-between">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className={`text-xs px-2 py-0.5 rounded ${typeColors[item.type]}`}>
-                    {typeLabels[item.type]}
-                  </span>
-                  <span className="text-sm text-gray-500 truncate">{item.repo}</span>
-                </div>
-                <p className="text-sm text-gray-900">{item.title}</p>
-              </div>
-              <span className="text-xs text-gray-500 ml-2 whitespace-nowrap">
-                {formatRelativeTime(item.at)}
-              </span>
-            </div>
+            <span className="text-[13px] truncate flex-1">
+              {item.type === 'commit' && `推送了提交 · ${item.repo}`}
+              {item.type === 'pr' && `合并 PR · ${item.title}`}
+              {item.type === 'review' && `审查了 PR · ${item.title}`}
+              {item.type === 'issue' && `${item.title}`}
+              {item.type === 'other' && item.title}
+            </span>
+            <span className="text-[13px] text-muted ml-4 whitespace-nowrap">
+              {formatRelativeTime(item.at)}
+            </span>
           </a>
         ))}
       </div>

@@ -8,5 +8,5 @@ export const manifest: ModuleManifest = {
   defaultEnabled: true,
   requires: ['gmail'],
   configKeys: [],
-  layout: { minWidth: 'full', priority: 10 },
+  layout: { column: 'left', priority: 10 },
 };

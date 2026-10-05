@@ -21,17 +21,40 @@ function formatRelativeTime(isoString: string): string {
   return `${days}天前`;
 }
 
+function getInitial(from: string): string {
+  return from.charAt(0).toUpperCase();
+}
+
+function getAvatarColor(from: string): string {
+  const colors = [
+    'bg-red-900/40 text-red-300',
+    'bg-purple-900/40 text-purple-300',
+    'bg-slate-700 text-slate-200'
+  ];
+  const index = from.charCodeAt(0) % colors.length;
+  return colors[index];
+}
+
 export function Card({ result, onRefresh }: Props) {
   if (result.status === 'disconnected') {
     return (
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-bold mb-4">邮件待办</h2>
-        <div className="text-gray-500 text-center py-8">
-          <p>未连接 Gmail</p>
-          <p className="text-sm mt-2">请在设置中连接您的 Gmail 账户</p>
+      <div className="bg-card-bg border border-card-border rounded-card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-[30px] h-[30px] rounded-lg bg-accent/10 text-accent
+                            flex items-center justify-center text-[15px]">
+              ✉
+            </div>
+            <h2 className="text-base font-semibold">邮件待办</h2>
+          </div>
+        </div>
+        <div className="text-muted text-center py-8">
+          <p className="mb-2">未连接 Gmail</p>
+          <p className="text-sm mb-4">请在设置中连接您的 Gmail 账户</p>
           <a
             href="/settings"
-            className="inline-block mt-4 px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+            className="inline-block px-6 py-2 bg-accent text-background rounded-lg
+                       hover:opacity-90 transition font-medium"
           >
             去连接
           </a>
@@ -42,9 +65,17 @@ export function Card({ result, onRefresh }: Props) {
 
   if (result.status === 'unconfigured') {
     return (
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-bold mb-4">邮件待办</h2>
-        <div className="text-gray-500 text-center py-8">
+      <div className="bg-card-bg border border-card-border rounded-card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-[30px] h-[30px] rounded-lg bg-accent/10 text-accent
+                            flex items-center justify-center text-[15px]">
+              ✉
+            </div>
+            <h2 className="text-base font-semibold">邮件待办</h2>
+          </div>
+        </div>
+        <div className="text-muted text-center py-8">
           <p>需要配置</p>
         </div>
       </div>
@@ -53,13 +84,22 @@ export function Card({ result, onRefresh }: Props) {
 
   if (result.status === 'error') {
     return (
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-bold mb-4">邮件待办</h2>
-        <div className="text-red-500 text-center py-8">
-          <p>加载失败：{result.message}</p>
+      <div className="bg-card-bg border border-card-border rounded-card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-[30px] h-[30px] rounded-lg bg-accent/10 text-accent
+                            flex items-center justify-center text-[15px]">
+              ✉
+            </div>
+            <h2 className="text-base font-semibold">邮件待办</h2>
+          </div>
+        </div>
+        <div className="text-center py-8">
+          <p className="text-down mb-4">加载失败：{result.message}</p>
           <button
             onClick={onRefresh}
-            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            className="px-4 py-2 bg-accent text-background rounded-lg
+                       hover:opacity-90 transition font-medium"
           >
             重试
           </button>
@@ -70,9 +110,17 @@ export function Card({ result, onRefresh }: Props) {
 
   if (result.status === 'empty') {
     return (
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-bold mb-4">邮件待办</h2>
-        <div className="text-gray-500 text-center py-8">
+      <div className="bg-card-bg border border-card-border rounded-card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-[30px] h-[30px] rounded-lg bg-accent/10 text-accent
+                            flex items-center justify-center text-[15px]">
+              ✉
+            </div>
+            <h2 className="text-base font-semibold">邮件待办</h2>
+          </div>
+        </div>
+        <div className="text-muted text-center py-8">
           <p>收件箱无未读邮件</p>
           {result.hint && <p className="text-sm mt-2">{result.hint}</p>}
         </div>
@@ -87,60 +135,66 @@ export function Card({ result, onRefresh }: Props) {
   const { data } = result;
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
+    <div className="bg-card-bg border border-card-border rounded-card p-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold">邮件待办</h2>
-        <button
-          onClick={onRefresh}
-          className="text-sm text-blue-600 hover:text-blue-800"
+        <div className="flex items-center gap-3">
+          <div className="w-[30px] h-[30px] rounded-lg bg-accent/10 text-accent
+                          flex items-center justify-center text-[15px]">
+            ✉
+          </div>
+          <h2 className="text-base font-semibold">邮件待办</h2>
+          <span className="px-2.5 py-0.5 rounded-full text-[11.5px] font-semibold
+                           bg-accent text-background font-feature-tnum">
+            {data.totalCount}
+          </span>
+        </div>
+        <a
+          href="https://mail.google.com/mail/u/0/#inbox"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[13px] font-medium text-accent hover:underline"
         >
-          刷新
-        </button>
+          打开 Gmail ↗
+        </a>
       </div>
 
-      <div className="space-y-3">
-        {data.items.map((item) => (
+      <div className="space-y-0">
+        {data.items.map((item, idx) => (
           <a
             key={item.id}
             href={item.deepLink}
             target="_blank"
             rel="noopener noreferrer"
-            className="block p-3 border border-gray-200 rounded hover:bg-gray-50 transition"
+            className={`flex gap-3 py-3 px-1 hover:bg-tile/50 transition -mx-1 rounded
+                        ${idx < data.items.length - 1 ? 'border-b border-card-border' : ''}`}
           >
-            <div className="flex items-start justify-between">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-sm font-medium text-gray-900 truncate">
+            <div className={`w-[34px] h-[34px] rounded-full flex-none
+                              flex items-center justify-center font-bold text-[13px]
+                              ${getAvatarColor(item.from)}`}>
+              {getInitial(item.from)}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-0.5">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-sm font-semibold truncate">
                     {item.from}
                   </span>
                   {item.needsReply && (
-                    <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">
-                      待回复
+                    <span className="text-[11.5px] bg-yellow-500/15 text-yellow-300
+                                     px-2.5 py-0.5 rounded-full font-semibold whitespace-nowrap">
+                      需回复
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-gray-600 truncate">{item.subject}</p>
+                <span className="text-xs text-muted ml-2 whitespace-nowrap font-feature-tnum">
+                  {formatRelativeTime(item.receivedAt)}
+                </span>
               </div>
-              <span className="text-xs text-gray-500 ml-2 whitespace-nowrap">
-                {formatRelativeTime(item.receivedAt)}
-              </span>
+              <p className="text-[13px] text-muted truncate">{item.subject}</p>
             </div>
           </a>
         ))}
       </div>
-
-      {data.totalCount > data.items.length && (
-        <div className="mt-4 text-center">
-          <a
-            href="https://mail.google.com/mail/u/0/#search/is%3Aunread"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-blue-600 hover:text-blue-800"
-          >
-            查看全部 ({data.totalCount})
-          </a>
-        </div>
-      )}
     </div>
   );
 }
