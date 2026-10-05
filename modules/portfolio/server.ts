@@ -1,11 +1,14 @@
 import { isDatabaseConfigured, getDb } from '@/db/client';
-import { accounts, instruments, snapshots, positions, cashBalances, cashFlows } from '@/db/schema';
-import { eq, desc, and, sql, inArray } from 'drizzle-orm';
+import { cashFlows } from '@/db/schema';
 import Decimal from 'decimal.js';
 import type { PortfolioData, PortfolioSummary } from './types';
 import { calculateXIRR, isStale, type CashFlow } from './calculations';
 import { ACCOUNT_TYPE_LABELS, ASSET_CLASS_LABELS } from './types';
-import { getLatestSnapshotsByAccount } from './queries';
+import { 
+  getLatestSnapshotsByAccount, 
+  getLatestPositionsByAccount, 
+  getLatestCashBalancesByAccount 
+} from './queries';
 
 export async function loadPortfolioData(): Promise<PortfolioData | null> {
   if (!isDatabaseConfigured()) {
@@ -14,14 +17,12 @@ export async function loadPortfolioData(): Promise<PortfolioData | null> {
 
   const db = getDb();
 
-  // 获取每个账户的最新快照（使用共用函数）
+  // 获取每个账户的最新快照信息（使用共用函数）
   const accountSnapshots = await getLatestSnapshotsByAccount();
 
   if (accountSnapshots.length === 0) {
     return null;
   }
-
-  const latestSnapshotIds = accountSnapshots.map(s => s.snapshotId);
   
   // 取所有账户快照中最新的 asOf 作为整体日期
   const latestAsOf = accountSnapshots
@@ -29,27 +30,11 @@ export async function loadPortfolioData(): Promise<PortfolioData | null> {
     .sort()
     .reverse()[0];
 
-  // 获取这些快照的所有持仓
-  const allPositions = await db
-    .select({
-      position: positions,
-      account: accounts,
-      instrument: instruments,
-    })
-    .from(positions)
-    .innerJoin(accounts, eq(positions.accountId, accounts.id))
-    .innerJoin(instruments, eq(positions.instrumentId, instruments.id))
-    .where(inArray(positions.snapshotId, latestSnapshotIds));
+  // 获取所有账户的最新持仓（按账户+快照配对查询，避免重复）
+  const allPositions = await getLatestPositionsByAccount();
 
-  // 获取现金余额
-  const allCashBalances = await db
-    .select({
-      cash: cashBalances,
-      account: accounts,
-    })
-    .from(cashBalances)
-    .innerJoin(accounts, eq(cashBalances.accountId, accounts.id))
-    .where(inArray(cashBalances.snapshotId, latestSnapshotIds));
+  // 获取所有账户的最新现金余额
+  const allCashBalances = await getLatestCashBalancesByAccount();
 
   // 获取所有现金流
   const allCashFlows = await db

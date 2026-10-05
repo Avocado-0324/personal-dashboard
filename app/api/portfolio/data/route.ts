@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, isDatabaseConfigured } from '@/db/client';
-import { accounts, snapshots, instruments, positions, cashBalances } from '@/db/schema';
-import { eq, desc, inArray } from 'drizzle-orm';
-import { getLatestSnapshotsByAccount } from '@/modules/portfolio/queries';
+import { accounts, snapshots } from '@/db/schema';
+import { desc } from 'drizzle-orm';
+import { 
+  getLatestSnapshotsByAccount, 
+  getLatestPositionsByAccount, 
+  getLatestCashBalancesByAccount 
+} from '@/modules/portfolio/queries';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +26,6 @@ export async function GET() {
 
     // 获取每个账户的最新快照信息
     const latestSnapshotsByAccount = await getLatestSnapshotsByAccount();
-    const latestSnapshotIds = latestSnapshotsByAccount.map(s => s.snapshotId);
 
     // 获取最近的快照（用于显示历史）
     const recentSnapshots = await db
@@ -31,31 +34,9 @@ export async function GET() {
       .orderBy(desc(snapshots.asOf), desc(snapshots.createdAt))
       .limit(10);
 
-    // 获取所有账户的最新持仓（每个账户取其最新快照）
-    let allPositions: any[] = [];
-    let allCashBalances: any[] = [];
-    
-    if (latestSnapshotIds.length > 0) {
-      allPositions = await db
-        .select({
-          position: positions,
-          account: accounts,
-          instrument: instruments,
-        })
-        .from(positions)
-        .innerJoin(accounts, eq(positions.accountId, accounts.id))
-        .innerJoin(instruments, eq(positions.instrumentId, instruments.id))
-        .where(inArray(positions.snapshotId, latestSnapshotIds));
-      
-      allCashBalances = await db
-        .select({
-          cash: cashBalances,
-          account: accounts,
-        })
-        .from(cashBalances)
-        .innerJoin(accounts, eq(cashBalances.accountId, accounts.id))
-        .where(inArray(cashBalances.snapshotId, latestSnapshotIds));
-    }
+    // 获取所有账户的最新持仓（按账户+快照配对查询，避免重复）
+    const allPositions = await getLatestPositionsByAccount();
+    const allCashBalances = await getLatestCashBalancesByAccount();
 
     return NextResponse.json(
       {
