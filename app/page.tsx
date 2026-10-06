@@ -96,7 +96,7 @@ export default async function HomePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-[1200px] mx-auto px-8 py-7">
+      <div className="max-w-[1200px] mx-auto px-8 pt-7 pb-4 lg:pb-7">
         {/* 顶部导航 */}
         <nav className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3 whitespace-nowrap">
@@ -158,6 +158,9 @@ export default async function HomePage() {
                 <div className="font-mono text-[24px] font-bold">
                   ¥{formatNumberWithCommas(portfolioSummary.totalJpy)}
                 </div>
+                {portfolioSummary.asOfRangeLabel && (
+                  <div className="text-xs text-muted mt-1">{portfolioSummary.asOfRangeLabel}</div>
+                )}
               </div>
               <div>
                 <div className="text-muted text-xs mb-1">累计盈亏</div>
@@ -198,14 +201,13 @@ export default async function HomePage() {
         ) : (
           <>
             {/* 单份渲染：桌面两列容器各自 flex-col，手机列容器透明用 order 排序 */}
-            <div className="flex flex-col lg:grid lg:grid-cols-[1.35fr_1fr] lg:gap-5">
+            <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[1.35fr_1fr] lg:gap-5">
               {/* 左栏容器：手机时透明（contents），桌面时 flex-col */}
               <div className="max-lg:contents lg:flex lg:flex-col lg:gap-5">
                 {leftModules.map((module) => (
                   <div
                     key={module.id}
                     style={{ order: module.manifest.layout.mobileOrder }}
-                    className="max-lg:mb-5"
                   >
                     <ModuleCard
                       moduleId={module.id}
@@ -222,7 +224,6 @@ export default async function HomePage() {
                   <div
                     key={module.id}
                     style={{ order: module.manifest.layout.mobileOrder }}
-                    className="max-lg:mb-5"
                   >
                     <ModuleCard
                       moduleId={module.id}
@@ -235,7 +236,7 @@ export default async function HomePage() {
             </div>
 
             {/* 页脚 */}
-            <footer className="mt-10 text-center text-xs text-muted">
+            <footer className="mt-6 text-center text-xs text-muted">
               模块可在设置中开关
             </footer>
           </>

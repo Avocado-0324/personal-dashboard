@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, date, numeric, integer, timestamp, char, uniqueIndex, index, check } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, date, numeric, integer, timestamp, char, uniqueIndex, index, check, primaryKey } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 export const importBatches = pgTable('import_batches', {
@@ -76,6 +76,13 @@ export const cashBalances = pgTable('cash_balances', {
   fxRateToJpy: numeric('fx_rate_to_jpy', { precision: 14, scale: 6 }),
 }, (table) => ({
   snapshotIdx: index('cash_balances_snapshot_idx').on(table.snapshotId),
+}));
+
+export const snapshotAccounts = pgTable('snapshot_accounts', {
+  snapshotId: uuid('snapshot_id').notNull().references(() => snapshots.id, { onDelete: 'cascade' }),
+  accountId: uuid('account_id').notNull().references(() => accounts.id),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.snapshotId, table.accountId] }),
 }));
 
 export const cashFlows = pgTable('cash_flows', {

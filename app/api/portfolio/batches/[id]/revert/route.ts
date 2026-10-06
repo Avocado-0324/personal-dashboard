@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPoolDb, isDatabaseConfigured } from '@/db/client';
 import { importBatches, snapshots, positions, cashBalances, cashFlows } from '@/db/schema';
 import { eq } from 'drizzle-orm';
+import { isUuid } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +12,13 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
+
+    if (!isUuid(id)) {
+      return NextResponse.json(
+        { error: '无效的批次 id' },
+        { status: 400 }
+      );
+    }
     
     if (!isDatabaseConfigured()) {
       return NextResponse.json(

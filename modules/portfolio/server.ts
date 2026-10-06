@@ -2,13 +2,20 @@ import { isDatabaseConfigured, getDb } from '@/db/client';
 import { cashFlows } from '@/db/schema';
 import Decimal from 'decimal.js';
 import type { PortfolioData, PortfolioSummary } from './types';
-import { calculateXIRR, isStale, marketValueJpyFloor, cashValueJpyFloor, type CashFlow } from './calculations';
-import { ACCOUNT_TYPE_LABELS, ASSET_CLASS_LABELS } from './types';
-import { 
-  getLatestSnapshotsByAccount, 
-  getLatestPositionsByAccount, 
-  getLatestCashBalancesByAccount 
+import { calculateXIRR, isStale, marketValueJpyFloor, cashValueJpyFloor, unrealizedPnlJpyFloor, type CashFlow } from './calculations';
+import { ASSET_CLASS_LABELS } from './types';
+import {
+  getLatestSnapshotsByAccount,
+  getLatestPositionsByAccount,
+  getLatestCashBalancesByAccount,
 } from './queries';
+import {
+  mergeHoldingsByInstrument,
+  formatAccountBreakdown,
+  formatAsOfRangeLabel,
+  buildTaxAllocation,
+  type HoldingForMerge,
+} from './display';
 
 export async function loadPortfolioData(): Promise<PortfolioData | null> {
   if (!isDatabaseConfigured()) {
@@ -17,101 +24,81 @@ export async function loadPortfolioData(): Promise<PortfolioData | null> {
 
   const db = getDb();
 
-  // 获取每个账户的最新快照信息（使用共用函数）
   const accountSnapshots = await getLatestSnapshotsByAccount();
 
   if (accountSnapshots.length === 0) {
     return null;
   }
-  
-  // 取所有账户快照中最新的 asOf 作为整体日期
+
   const latestAsOf = accountSnapshots
     .map(s => s.asOf)
     .sort()
     .reverse()[0];
+  const asOfRangeLabel = formatAsOfRangeLabel(accountSnapshots.map(s => s.asOf));
 
-  // 获取所有账户的最新持仓（按账户+快照配对查询，避免重复）
   const allPositions = await getLatestPositionsByAccount();
-
-  // 获取所有账户的最新现金余额
   const allCashBalances = await getLatestCashBalancesByAccount();
 
-  // 获取所有现金流
   const allCashFlows = await db
     .select()
     .from(cashFlows)
     .orderBy(cashFlows.date);
 
-  // 计算总市值
   let totalValue = new Decimal(0);
-  const positionsByAccount = new Map<string, Decimal>();
   const positionsByAssetClass = new Map<string, Decimal>();
-  const holdingsWithValue: Array<{
-    symbol: string;
-    name: string;
-    value: Decimal;
-    unrealizedPnl: Decimal;
-    accountType: string;
-  }> = [];
+  const holdingsForMerge: HoldingForMerge[] = [];
+  const taxHoldings: Array<{ accountType: string; value: Decimal }> = [];
   let missingFxCount = 0;
 
   for (const { position, account, instrument } of allPositions) {
     const fxRateRaw = position.fxRateToJpy;
 
-    // 缺汇率则跳过汇总
     if (!fxRateRaw || fxRateRaw === null) {
       missingFxCount++;
       continue;
     }
 
-    // 计算市值（逐行 floor）
     const value = marketValueJpyFloor({
       quantity: position.quantity,
       price: position.price,
       unitBasis: instrument.unitBasis,
       fxRateToJpy: fxRateRaw,
     });
-    
-    // 未实现盈亏（也需要 floor）
-    const avgCost = new Decimal(position.avgCost);
-    const unrealizedPnl = marketValueJpyFloor({
+
+    const unrealizedPnl = unrealizedPnlJpyFloor({
       quantity: position.quantity,
-      price: new Decimal(position.price).minus(avgCost).toString(),
+      price: position.price,
+      avgCost: position.avgCost,
       unitBasis: instrument.unitBasis,
       fxRateToJpy: fxRateRaw,
     });
 
     totalValue = totalValue.plus(value);
 
-    // 按账户累加
-    const accountTotal = positionsByAccount.get(account.type) || new Decimal(0);
-    positionsByAccount.set(account.type, accountTotal.plus(value));
-
-    // 按资产类别累加
     const assetClassTotal = positionsByAssetClass.get(instrument.assetClass) || new Decimal(0);
     positionsByAssetClass.set(instrument.assetClass, assetClassTotal.plus(value));
 
-    holdingsWithValue.push({
+    taxHoldings.push({ accountType: account.type, value });
+    holdingsForMerge.push({
       symbol: instrument.symbol,
       name: instrument.name,
+      currency: instrument.currency,
+      assetClass: instrument.assetClass,
       value,
       unrealizedPnl,
       accountType: account.type,
     });
   }
 
-  // 加上现金
   let totalCash = new Decimal(0);
-  for (const { cash, account } of allCashBalances) {
+  for (const { cash } of allCashBalances) {
     const fxRateRaw = cash.fxRateToJpy;
 
-    // 缺汇率则跳过
     if (!fxRateRaw || fxRateRaw === null) {
       missingFxCount++;
       continue;
     }
 
-    // 计算现金日元金额（逐行 floor）
     const value = cashValueJpyFloor({
       amount: cash.amount,
       fxRateToJpy: fxRateRaw,
@@ -119,12 +106,8 @@ export async function loadPortfolioData(): Promise<PortfolioData | null> {
 
     totalValue = totalValue.plus(value);
     totalCash = totalCash.plus(value);
-
-    const accountTotal = positionsByAccount.get(account.type) || new Decimal(0);
-    positionsByAccount.set(account.type, accountTotal.plus(value));
   }
 
-  // 计算净投入
   let netContribution = new Decimal(0);
   for (const flow of allCashFlows) {
     const amount = new Decimal(flow.amountJpy);
@@ -135,19 +118,16 @@ export async function loadPortfolioData(): Promise<PortfolioData | null> {
     }
   }
 
-  // 计算盈亏
   const pnl = totalValue.minus(netContribution);
   const pnlRatio = netContribution.gt(0) ? pnl.div(netContribution) : null;
 
-  // 计算 XIRR
   const xirrFlows: CashFlow[] = allCashFlows.map(flow => ({
     date: new Date(flow.date),
-    amount: flow.direction === 'deposit' 
-      ? new Decimal(flow.amountJpy).neg() 
+    amount: flow.direction === 'deposit'
+      ? new Decimal(flow.amountJpy).neg()
       : new Decimal(flow.amountJpy),
   }));
-  
-  // 加上终值
+
   xirrFlows.push({
     date: new Date(latestAsOf),
     amount: totalValue,
@@ -155,17 +135,12 @@ export async function loadPortfolioData(): Promise<PortfolioData | null> {
 
   const xirr = calculateXIRR(xirrFlows);
 
-  // 按账户分布（现金已在上面累加到账户 type 里）
-  const allocationByAccount = Array.from(positionsByAccount.entries())
-    .map(([type, value]) => ({
-      accountType: type,
-      label: ACCOUNT_TYPE_LABELS[type as keyof typeof ACCOUNT_TYPE_LABELS] || type,
-      valueJpy: value.toFixed(0),
-      ratio: totalValue.gt(0) ? value.div(totalValue).toFixed(4) : '0',
-    }))
-    .sort((a, b) => new Decimal(b.valueJpy).minus(new Decimal(a.valueJpy)).toNumber());
+  const allocationByAccount = buildTaxAllocation({
+    holdings: taxHoldings,
+    cashTotal: totalCash,
+    totalValue,
+  });
 
-  // 按资产类别分布
   const allocationByAssetClass = Array.from(positionsByAssetClass.entries())
     .map(([assetClass, value]) => ({
       assetClass,
@@ -175,7 +150,6 @@ export async function loadPortfolioData(): Promise<PortfolioData | null> {
     }))
     .sort((a, b) => new Decimal(b.valueJpy).minus(new Decimal(a.valueJpy)).toNumber());
 
-  // 现金单列一项到资产类别分布
   if (totalCash.gt(0)) {
     allocationByAssetClass.push({
       assetClass: 'cash',
@@ -185,21 +159,25 @@ export async function loadPortfolioData(): Promise<PortfolioData | null> {
     });
   }
 
-  // Top 持仓
-  const topHoldings = holdingsWithValue
-    .sort((a, b) => b.value.minus(a.value).toNumber())
+  const topHoldings = mergeHoldingsByInstrument(holdingsForMerge)
     .slice(0, 5)
     .map(h => ({
       symbol: h.symbol,
       name: h.name,
+      assetClass: h.assetClass,
+      currency: h.currency,
       valueJpy: h.value.toFixed(0),
       unrealizedPnlJpy: h.unrealizedPnl.toFixed(0),
-      pnlRatio: h.value.gt(0) ? h.unrealizedPnl.div(h.value.minus(h.unrealizedPnl)).toFixed(4) : '0',
-      accountType: ACCOUNT_TYPE_LABELS[h.accountType as keyof typeof ACCOUNT_TYPE_LABELS] || h.accountType,
+      pnlRatio: (() => {
+        const cost = h.value.minus(h.unrealizedPnl);
+        return cost.gt(0) ? h.unrealizedPnl.div(cost).toFixed(4) : '0';
+      })(),
+      accountBreakdown: formatAccountBreakdown(h.tokuteiCount, h.nisaCount),
     }));
 
   return {
     asOf: latestAsOf,
+    asOfRangeLabel,
     baseCurrency: 'JPY',
     totalJpy: totalValue.toFixed(0),
     netContributionJpy: netContribution.toFixed(0),
@@ -223,6 +201,7 @@ export async function loadSummary(): Promise<PortfolioSummary | null> {
     pnlJpy: data.pnlJpy,
     xirr: data.xirr,
     asOf: data.asOf,
+    asOfRangeLabel: data.asOfRangeLabel,
     missingFxCount: data.missingFxCount,
   };
 }

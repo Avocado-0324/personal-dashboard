@@ -1,6 +1,6 @@
 import { describe, it, expect } from '@jest/globals';
 import Decimal from 'decimal.js';
-import { calculateXIRR, type CashFlow } from '../modules/portfolio/calculations';
+import { calculateXIRR, marketValueJpyFloor, unrealizedPnlJpyFloor, type CashFlow } from '../modules/portfolio/calculations';
 
 describe('Portfolio Calculations', () => {
   describe('XIRR', () => {
@@ -93,6 +93,56 @@ describe('Portfolio Calculations', () => {
 
       const xirr = calculateXIRR(flows);
       expect(xirr).toBeNull();
+    });
+  });
+
+  describe('unrealizedPnlJpyFloor', () => {
+    it('等于 floor(评价额) − floor(取得额)，而不是对价差 floor', () => {
+      const qty = '3';
+      const price = '100';
+      const avgCost = '100.4';
+      const unitBasis = '1';
+      const fx = '1';
+
+      const market = marketValueJpyFloor({ quantity: qty, price, unitBasis, fxRateToJpy: fx });
+      const cost = marketValueJpyFloor({ quantity: qty, price: avgCost, unitBasis, fxRateToJpy: fx });
+      const pnl = unrealizedPnlJpyFloor({ quantity: qty, price, avgCost, unitBasis, fxRateToJpy: fx });
+
+      expect(market.toString()).toBe('300');
+      expect(cost.toString()).toBe('301');
+      expect(pnl.toString()).toBe('-1');
+
+      const spreadFloored = marketValueJpyFloor({
+        quantity: qty,
+        price: new Decimal(price).minus(avgCost).toString(),
+        unitBasis,
+        fxRateToJpy: fx,
+      });
+      expect(spreadFloored.toString()).toBe('-2');
+      expect(pnl.equals(spreadFloored)).toBe(false);
+    });
+
+    it('外币持仓同样先各自 floor 再相减', () => {
+      const pnl = unrealizedPnlJpyFloor({
+        quantity: '1',
+        price: '100.9',
+        avgCost: '100',
+        unitBasis: '1',
+        fxRateToJpy: '150.5',
+      });
+      const market = marketValueJpyFloor({
+        quantity: '1',
+        price: '100.9',
+        unitBasis: '1',
+        fxRateToJpy: '150.5',
+      });
+      const cost = marketValueJpyFloor({
+        quantity: '1',
+        price: '100',
+        unitBasis: '1',
+        fxRateToJpy: '150.5',
+      });
+      expect(pnl.toString()).toBe(market.minus(cost).toString());
     });
   });
 });

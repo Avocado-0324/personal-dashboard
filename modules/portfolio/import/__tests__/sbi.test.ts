@@ -169,5 +169,21 @@ describe('SBI Holdings CSV Parser', () => {
     expect(oldTsumitate?.count).toBe(0);
     expect(oldTsumitate?.totalValueJpy).toBe('0');
     expect(oldTsumitate?.matchesFile).toBe(true);
+    expect(oldTsumitate?.accountType).toBe('nisa_tsumitate');
+  });
+
+  it('decodeShiftJIS 直接传 Buffer 或按 byteOffset 切片', () => {
+    const sjisBuffer = iconv.encode(fixtureUtf8, 'shift_jis');
+    const pad = Buffer.alloc(24, 0);
+    const pooled = Buffer.concat([pad, sjisBuffer, pad]);
+    const view = pooled.subarray(pad.length, pad.length + sjisBuffer.length);
+    const sliced = Buffer.from(view.buffer, view.byteOffset, view.byteLength);
+
+    for (const input of [sjisBuffer, sliced, view]) {
+      const decoded = decodeShiftJIS(input);
+      const result = parseSBIHoldings(decoded);
+      expect(result.errors).toEqual([]);
+      expect(result.positions.length).toBe(5);
+    }
   });
 });
