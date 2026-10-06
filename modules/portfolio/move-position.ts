@@ -1,8 +1,8 @@
 import { snapshotAccounts, positions, accounts } from '@/db/schema';
 import { and, eq } from 'drizzle-orm';
-import { isUniqueViolation } from '@/db/utils';
 
 export const MOVE_NOT_IN_SNAPSHOT_ERROR = '目标账户不在同一份数据里';
+export const MOVE_DUPLICATE_INSTRUMENT_ERROR = '目标账户已持有这只标的';
 
 export function isTargetInSameSnapshot(
   positionSnapshotId: string,
@@ -12,6 +12,23 @@ export function isTargetInSameSnapshot(
   return members.some(
     row => row.snapshotId === positionSnapshotId && row.accountId === targetAccountId,
   );
+}
+
+export function hasSameInstrumentInTarget(
+  rows: Array<{ instrumentId: string }>,
+  instrumentId: string,
+): boolean {
+  return rows.some(row => row.instrumentId === instrumentId);
+}
+
+export function isUniqueConstraintError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { code?: unknown; cause?: unknown };
+  if (e.code === '23505') return true;
+  if (e.cause && typeof e.cause === 'object' && (e.cause as { code?: unknown }).code === '23505') {
+    return true;
+  }
+  return false;
 }
 
 type MoveTx = {
@@ -83,14 +100,28 @@ export async function movePositionToAccount(
     return { ok: false, status: 409, error: MOVE_NOT_IN_SNAPSHOT_ERROR };
   }
 
+  const sameInstrument = await tx
+    .select({ instrumentId: positions.instrumentId })
+    .from(positions)
+    .where(and(
+      eq(positions.snapshotId, position.snapshotId),
+      eq(positions.accountId, accountId),
+      eq(positions.instrumentId, position.instrumentId),
+    ))
+    .limit(1);
+
+  if (hasSameInstrumentInTarget(sameInstrument, position.instrumentId)) {
+    return { ok: false, status: 409, error: MOVE_DUPLICATE_INSTRUMENT_ERROR };
+  }
+
   try {
     await tx
       .update(positions)
       .set({ accountId })
       .where(eq(positions.id, positionId));
   } catch (error) {
-    if (isUniqueViolation(error, 'positions_snapshot_account_instrument_unique')) {
-      return { ok: false, status: 409, error: '目标账户已有同一标的' };
+    if (isUniqueConstraintError(error)) {
+      return { ok: false, status: 409, error: MOVE_DUPLICATE_INSTRUMENT_ERROR };
     }
     throw error;
   }

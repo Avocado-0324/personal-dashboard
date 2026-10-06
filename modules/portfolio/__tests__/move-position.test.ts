@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { getPoolDb } from '@/db/client';
 import { accounts, snapshots, instruments, positions, snapshotAccounts, cashBalances } from '@/db/schema';
 import { getLatestPositionsByAccount, getLatestCashBalancesByAccount } from '../queries';
-import { isTargetInSameSnapshot, movePositionToAccount, MOVE_NOT_IN_SNAPSHOT_ERROR } from '../move-position';
+import { isTargetInSameSnapshot, movePositionToAccount, MOVE_NOT_IN_SNAPSHOT_ERROR, MOVE_DUPLICATE_INSTRUMENT_ERROR, hasSameInstrumentInTarget, isUniqueConstraintError } from '../move-position';
 import { eq } from 'drizzle-orm';
 
 describe('isTargetInSameSnapshot', () => {
@@ -14,6 +14,36 @@ describe('isTargetInSameSnapshot', () => {
     ];
     expect(isTargetInSameSnapshot('snap-jp', 'acct-nisa', members)).toBe(true);
     expect(isTargetInSameSnapshot('snap-jp', 'acct-us', members)).toBe(false);
+  });
+});
+
+describe('duplicate instrument conflict', () => {
+  it('目标账户已有同一 instrument 时判定冲突', () => {
+    expect(hasSameInstrumentInTarget([{ instrumentId: 'inst-a' }], 'inst-a')).toBe(true);
+    expect(hasSameInstrumentInTarget([{ instrumentId: 'inst-b' }], 'inst-a')).toBe(false);
+    expect(hasSameInstrumentInTarget([], 'inst-a')).toBe(false);
+  });
+
+  it('409 文案固定为 目标账户已持有这只标的', () => {
+    expect(MOVE_DUPLICATE_INSTRUMENT_ERROR).toBe('目标账户已持有这只标的');
+  });
+
+  it('并发唯一约束只认 23505，不比对约束名', () => {
+    expect(isUniqueConstraintError({ code: '23505' })).toBe(true);
+    expect(isUniqueConstraintError({
+      code: '23505',
+      constraint: 'positions_snapshot_id_account_id_instrument_id_key',
+    })).toBe(true);
+    expect(isUniqueConstraintError({
+      message: 'wrapped',
+      cause: { code: '23505', constraint: 'anything' },
+    })).toBe(true);
+    expect(isUniqueConstraintError({
+      code: '23503',
+      constraint: 'positions_snapshot_account_instrument_unique',
+    })).toBe(false);
+    expect(isUniqueConstraintError({ cause: { code: '23503' } })).toBe(false);
+    expect(isUniqueConstraintError(null)).toBe(false);
   });
 });
 
