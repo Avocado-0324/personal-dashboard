@@ -4,6 +4,7 @@ import Link from 'next/link';
 import type { ModuleLoadResult } from '@/lib/module-types';
 import type { PortfolioData } from './types';
 import Decimal from 'decimal.js';
+import { displayHoldingTitle, TAX_SEGMENT_COLORS, type TaxAllocationKey } from './display';
 
 export function PortfolioCard({ 
   result, 
@@ -106,18 +107,23 @@ export function PortfolioCard({
         </div>
       </div>
 
-      {/* 前 3 大持仓 */}
       <div className="space-y-3 mb-6">
         {topThree.map((holding, i) => {
           const pnl = new Decimal(holding.unrealizedPnlJpy);
           const pnlRatio = new Decimal(holding.pnlRatio).times(100);
           const isPositive = pnl.gte(0);
+          const { title, subtitle } = displayHoldingTitle(holding.assetClass, holding.symbol, holding.name);
 
           return (
-            <div key={i} className="flex items-center justify-between py-2 border-b border-card-border last:border-0">
+            <div key={`${holding.symbol}-${holding.currency}-${i}`} className="flex items-center justify-between py-2 border-b border-card-border last:border-0">
               <div className="flex-1 min-w-0">
-                <div className="font-medium text-foreground">{holding.name}</div>
-                <div className="text-xs text-muted">{holding.accountType}</div>
+                <div className="font-medium text-foreground">{title}</div>
+                {subtitle && (
+                  <div className="text-xs text-muted">{subtitle}</div>
+                )}
+                {holding.accountBreakdown && (
+                  <div className="text-xs text-muted">{holding.accountBreakdown}</div>
+                )}
               </div>
               <div className="text-right">
                 <div className="font-mono text-foreground">
@@ -132,23 +138,17 @@ export function PortfolioCard({
         })}
       </div>
 
-      {/* 账户分布 */}
       <div className="mb-2">
-        <p className="text-xs text-muted mb-2">按账户</p>
+        <p className="text-xs text-muted mb-2">按税制</p>
         <div className="h-3 flex rounded-full overflow-hidden bg-tile">
-          {data.allocationByAccount.slice(0, 4).map((alloc, i) => {
-            const colors = [
-              'bg-accent',
-              'bg-blue-400', 
-              'bg-purple-400',
-              'bg-pink-400'
-            ];
+          {data.allocationByAccount.map((alloc) => {
+            const color = TAX_SEGMENT_COLORS[alloc.accountType as TaxAllocationKey] ?? TAX_SEGMENT_COLORS.tokutei;
             const ratio = new Decimal(alloc.ratio).times(100).toNumber();
             
             return (
               <div
-                key={i}
-                className={colors[i % colors.length]}
+                key={alloc.accountType}
+                className={color.bar}
                 style={{ width: `${ratio}%` }}
                 title={`${alloc.label}: ${ratio.toFixed(1)}%`}
               />
@@ -156,18 +156,13 @@ export function PortfolioCard({
           })}
         </div>
         <div className="flex flex-wrap gap-3 mt-2 text-xs">
-          {data.allocationByAccount.slice(0, 4).map((alloc, i) => {
-            const colors = [
-              'text-accent',
-              'text-blue-400',
-              'text-purple-400', 
-              'text-pink-400'
-            ];
+          {data.allocationByAccount.map((alloc) => {
+            const color = TAX_SEGMENT_COLORS[alloc.accountType as TaxAllocationKey] ?? TAX_SEGMENT_COLORS.tokutei;
             const ratio = new Decimal(alloc.ratio).times(100);
             
             return (
-              <div key={i} className="flex items-center gap-1">
-                <span className={colors[i % colors.length]}>●</span>
+              <div key={alloc.accountType} className="flex items-center gap-1">
+                <span className={color.text}>●</span>
                 <span className="text-muted">{alloc.label}</span>
                 <span className="text-muted">{ratio.toFixed(0)}%</span>
               </div>

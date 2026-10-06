@@ -3,6 +3,7 @@ import { getPoolDb, isDatabaseConfigured } from '@/db/client';
 import { positions, cashBalances } from '@/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import Decimal from 'decimal.js';
+import { isCurrencyCode, isFxRateString, isUuid } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +13,13 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
+
+    if (!isUuid(id)) {
+      return NextResponse.json(
+        { error: '无效的快照 id' },
+        { status: 400 }
+      );
+    }
     
     if (!isDatabaseConfigured()) {
       return NextResponse.json(
@@ -30,6 +38,13 @@ export async function PATCH(
       );
     }
 
+    if (!isCurrencyCode(currency)) {
+      return NextResponse.json(
+        { error: 'currency 必须是 3 位大写字母' },
+        { status: 400 }
+      );
+    }
+
     if (currency === 'JPY') {
       return NextResponse.json(
         { error: 'JPY 汇率不能修改' },
@@ -37,8 +52,7 @@ export async function PATCH(
       );
     }
 
-    // 使用正则和 Decimal 校验，拒绝 "150abc" 等非法输入
-    if (typeof rateToJpy !== 'string' || !/^\d+(\.\d+)?$/.test(rateToJpy)) {
+    if (!isFxRateString(rateToJpy)) {
       return NextResponse.json(
         { error: '汇率格式无效' },
         { status: 400 }

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPoolDb, isDatabaseConfigured } from '@/db/client';
 import { accounts, snapshots, instruments, positions, importBatches } from '@/db/schema';
 import { decodeShiftJIS, parseSBIHoldings, computeIdempotencyKey } from '@/modules/portfolio/import/sbi';
-import { eq, and, sql, inArray } from 'drizzle-orm';
+import { recordSnapshotAccounts } from '@/modules/portfolio/snapshot-accounts';
+import { eq, and, sql } from 'drizzle-orm';
 import { isUniqueViolation } from '@/db/utils';
 
 export const dynamic = 'force-dynamic';
@@ -13,7 +14,7 @@ const MAX_FILE_SIZE = 1024 * 1024; // 1MB
  * SBI CSV 导入 API
  * 
  * 导入语义：
- * - 只写入/覆盖本次解析出的账户（由 parsedPositions 的 accountName 集合决定）
+ * - 只写入/覆盖本次解析出的账户（由 accountSummaries 的账户集合决定，含 0 条持仓的空段）
  * - 文件中未出现的账户不受影响，保持原有持仓不变
  */
 
@@ -71,6 +72,7 @@ export async function POST(request: NextRequest) {
         {
           accountSummaries: accountSummaries.map(s => ({
             accountName: s.accountName,
+            accountType: s.accountType,
             count: s.count,
             totalValueJpy: s.totalValueJpy,
             matchesFile: s.matchesFile,
@@ -127,51 +129,45 @@ export async function POST(request: NextRequest) {
     }
 
     try {
+      let createdBatchId: string | undefined;
       // 事务开始
       await db.transaction(async (tx) => {
-        // 获取文件中涉及的所有账户名
-        const accountNames = Array.from(new Set(parsedPositions.map(p => p.accountName)));
-        
-        // 获取或创建所有账户
+        // 文件里出现过的每个账户都要落 snapshot_accounts（0 条持仓的空段也要写）
         const accountMap = new Map<string, string>();
-        
-        for (const accountName of accountNames) {
+
+        for (const summary of accountSummaries) {
           const existingAccounts = await tx
             .select()
             .from(accounts)
-            .where(eq(accounts.name, accountName))
+            .where(eq(accounts.name, summary.accountName))
             .limit(1);
 
-          // 从 parsedPositions 中找到该账户的类型
-          const accountType = parsedPositions.find(p => p.accountName === accountName)?.accountType || 'tokutei';
+          const accountType = summary.accountType;
 
           let accountId: string;
           if (existingAccounts.length === 0) {
-            // 账户不存在，创建新账户
             const [newAccount] = await tx
               .insert(accounts)
               .values({
-                name: accountName,
+                name: summary.accountName,
                 type: accountType,
                 broker: 'SBI',
               })
               .returning();
             accountId = newAccount.id;
           } else {
-            // 账户已存在，检查 type 是否一致
             const existingAccount = existingAccounts[0];
             accountId = existingAccount.id;
-            
+
             if (existingAccount.type !== accountType) {
-              // type 不一致，更新为正确的 type
               await tx
                 .update(accounts)
                 .set({ type: accountType })
                 .where(eq(accounts.id, accountId));
             }
           }
-          
-          accountMap.set(accountName, accountId);
+
+          accountMap.set(summary.accountName, accountId);
         }
 
         // 创建批次
@@ -185,6 +181,7 @@ export async function POST(request: NextRequest) {
             status: 'committed',
           })
           .returning();
+        createdBatchId = batch.id;
 
         // 创建快照
         const [snapshot] = await tx
@@ -240,6 +237,8 @@ export async function POST(request: NextRequest) {
             fxRateToJpy: '1', // JPY 汇率固定为 1
           });
         }
+
+        await recordSnapshotAccounts(tx, snapshot.id, accountMap.values());
       });
 
       return NextResponse.json(
@@ -247,6 +246,7 @@ export async function POST(request: NextRequest) {
           imported: parsedPositions.length,
           errors: [],
           skipped: 0,
+          batchId: createdBatchId,
         },
         { headers: { 'Cache-Control': 'no-store' } }
       );

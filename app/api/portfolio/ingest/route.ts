@@ -5,6 +5,8 @@ import { importBatches, snapshots, accounts, instruments, positions, cashBalance
 import { eq, sql, and } from 'drizzle-orm';
 import { timingSafeEqual } from 'crypto';
 import { isUniqueViolation } from '@/db/utils';
+import { recordSnapshotAccounts } from '@/modules/portfolio/snapshot-accounts';
+import { CURRENCY_RE } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +24,7 @@ const IngestSchema = z.object({
     symbol: z.string(),
     name: z.string(),
     assetClass: z.enum(['jp_stock', 'us_stock', 'fund', 'etf', 'bond', 'reit', 'crypto', 'other']),
-    currency: z.string().length(3),
+    currency: z.string().regex(CURRENCY_RE),
     quantity: z.string(),
     avgCost: z.string(),
     price: z.string(),
@@ -31,7 +33,7 @@ const IngestSchema = z.object({
   })).optional(),
   cashBalances: z.array(z.object({
     accountName: z.string(),
-    currency: z.string().length(3),
+    currency: z.string().regex(CURRENCY_RE),
     amount: z.string(),
     fxRateToJpy: z.string().optional(),
   })).optional(),
@@ -317,6 +319,8 @@ export async function POST(request: NextRequest) {
           cashFlowsInserted++;
         }
       }
+
+      await recordSnapshotAccounts(tx, snapshot.id, accountMap.values());
 
       // 更新批次的行数
       await tx

@@ -39,15 +39,19 @@ export type ParsedPosition = {
   unitBasis: string;
 };
 
+export type AccountSummary = {
+  accountName: string;
+  accountType: 'tokutei' | 'nisa_growth' | 'nisa_tsumitate';
+  count: number;
+  totalValueJpy: string;
+  matchesFile: boolean;
+  fileSubtotal?: string;
+};
+
 export type ParseResult = {
   positions: ParsedPosition[];
   errors: CSVError[];
-  accountSummaries: Array<{
-    accountName: string;
-    count: number;
-    totalValueJpy: string;
-    matchesFile: boolean;
-  }>;
+  accountSummaries: AccountSummary[];
 };
 
 /**
@@ -62,9 +66,17 @@ const CUSTODY_TO_ACCOUNT: Record<string, { name: string; type: 'tokutei' | 'nisa
 
 /**
  * Shift_JIS 二进制解码（Node.js 环境）
+ * Uint8Array 必须按 byteOffset + byteLength 切片，不能用底层 .buffer 整段。
  */
-export function decodeShiftJIS(buffer: ArrayBuffer | Buffer): string {
-  const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+export function decodeShiftJIS(input: ArrayBuffer | Buffer | Uint8Array): string {
+  let buf: Buffer;
+  if (Buffer.isBuffer(input)) {
+    buf = input;
+  } else if (ArrayBuffer.isView(input)) {
+    buf = Buffer.from(input.buffer, input.byteOffset, input.byteLength);
+  } else {
+    buf = Buffer.from(input);
+  }
   return iconv.decode(buf, 'shift_jis');
 }
 
@@ -155,13 +167,7 @@ export function parseSBIHoldings(csvText: string): ParseResult {
   const lines = splitLines(csvText);
   const positions: ParsedPosition[] = [];
   const errors: CSVError[] = [];
-  const accountSummaries: Array<{
-    accountName: string;
-    count: number;
-    totalValueJpy: string;
-    matchesFile: boolean;
-    fileSubtotal?: string;
-  }> = [];
+  const accountSummaries: AccountSummary[] = [];
 
   // 跳过文件开头的空行和可选 BOM，查找「保有証券一覧」标题
   let i = 0;
@@ -287,8 +293,7 @@ export function parseSBIHoldings(csvText: string): ParseResult {
             const priceRaw = cleanNumber(fields[5] || '0');
             const marketValueRaw = cleanNumber(fields[7] || '0');
             
-            // 跳过空行或垃圾数据
-            if (!symbol || !name || symbol === '\x00' || name.includes('\x00')) {
+            if (!symbol || !name) {
               i++;
               continue;
             }
@@ -319,8 +324,7 @@ export function parseSBIHoldings(csvText: string): ParseResult {
             const priceRaw = cleanNumber(fields[4] || '0');
             const marketValueRaw = cleanNumber(fields[6] || '0');
             
-            // 跳过空行或垃圾数据
-            if (!fundName || fundName.includes('\x00')) {
+            if (!fundName) {
               i++;
               continue;
             }
@@ -378,6 +382,7 @@ export function parseSBIHoldings(csvText: string): ParseResult {
       if (!accountSummary) {
         accountSummary = {
           accountName,
+          accountType,
           count: 0,
           totalValueJpy: '0',
           matchesFile: true,

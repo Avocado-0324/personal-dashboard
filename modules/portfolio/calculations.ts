@@ -194,3 +194,31 @@ export function cashValueJpyFloor(params: {
   const value = amount.times(fxRate);
   return value.toDecimalPlaces(0, Decimal.ROUND_FLOOR);
 }
+
+/**
+ * 未实现盈亏 = floor(评价额) − floor(取得额)
+ *
+ * 契约 §10：不要对价差直接 floor。亏损时 ROUND_FLOOR 会把 -12.3 变成 -13，
+ * 且「评价额 − 取得额」会和显示盈亏对不上。
+ */
+export function unrealizedPnlJpyFloor(params: {
+  quantity: string | Decimal;
+  price: string | Decimal;
+  avgCost: string | Decimal;
+  unitBasis: string | Decimal;
+  fxRateToJpy: string | Decimal;
+}): Decimal {
+  const marketValue = marketValueJpyFloor({
+    quantity: params.quantity,
+    price: params.price,
+    unitBasis: params.unitBasis,
+    fxRateToJpy: params.fxRateToJpy,
+  });
+  const costValue = marketValueJpyFloor({
+    quantity: params.quantity,
+    price: params.avgCost,
+    unitBasis: params.unitBasis,
+    fxRateToJpy: params.fxRateToJpy,
+  });
+  return marketValue.minus(costValue);
+}

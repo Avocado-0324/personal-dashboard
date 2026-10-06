@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import Link from 'next/link';
 import Decimal from 'decimal.js';
 import { calculateXIRR, marketValueJpyFloor, cashValueJpyFloor } from '@/modules/portfolio/calculations';
 import { getUserSettings } from '@/lib/user-settings';
 import { getAllModules } from '@/lib/module-registry';
+import { formatAsOfMd, displayHoldingTitle, formatQuantity } from '@/modules/portfolio/display';
+import { isFxRateString } from '@/lib/validation';
 
 type Account = {
   id: string;
@@ -27,6 +29,11 @@ type Data = {
     cash: any;
     account: any;
   }>;
+  accountSnapshots?: Array<{
+    accountId: string;
+    snapshotId: string;
+    asOf: string;
+  }>;
 };
 
 type CashFlow = {
@@ -43,24 +50,68 @@ type Batch = {
   createdAt: string;
 };
 
-// 格式化数量：整数不带小数，小数最多4位并去除末尾0，加千分位
-function formatQuantity(qty: string): string {
-  const num = new Decimal(qty);
-  const isInteger = num.modulo(1).isZero();
-  
-  if (isInteger) {
-    // 整数：无小数点，加千分位
-    return num.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  } else {
-    // 小数：最多4位，去除末尾0
-    let formatted = num.toFixed(4);
-    // 去除末尾多余的0
-    formatted = formatted.replace(/0+$/, '').replace(/\.$/, '');
-    // 添加千分位（整数部分）
-    const parts = formatted.split('.');
-    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    return parts.join('.');
+type AccountGroup = {
+  accountId: string;
+  accountName: string;
+  asOf: string | null;
+  positions: Position[];
+  marketValue: Decimal;
+};
+
+function buildAccountGroups(data: Data | null): AccountGroup[] {
+  if (!data) return [];
+  const groups = new Map<string, AccountGroup>();
+
+  for (const snap of data.accountSnapshots || []) {
+    const account = data.accounts.find(a => a.id === snap.accountId);
+    groups.set(snap.accountId, {
+      accountId: snap.accountId,
+      accountName: account?.name || snap.accountId,
+      asOf: snap.asOf,
+      positions: [],
+      marketValue: new Decimal(0),
+    });
   }
+
+  for (const pos of data.positions || []) {
+    const accountId = pos.account.id as string;
+    let group = groups.get(accountId);
+    if (!group) {
+      group = {
+        accountId,
+        accountName: pos.account.name,
+        asOf: null,
+        positions: [],
+        marketValue: new Decimal(0),
+      };
+      groups.set(accountId, group);
+    }
+    group.positions.push(pos);
+    const fx = pos.position.fxRateToJpy;
+    if (fx) {
+      group.marketValue = group.marketValue.plus(marketValueJpyFloor({
+        quantity: pos.position.quantity,
+        price: pos.position.price,
+        unitBasis: pos.instrument.unitBasis,
+        fxRateToJpy: fx,
+      }));
+    }
+  }
+
+  return Array.from(groups.values()).sort((a, b) =>
+    a.accountName.localeCompare(b.accountName, 'zh')
+  );
+}
+
+function accountsInSameSnapshot(data: Data | null, snapshotId: string, currentAccountId: string): Account[] {
+  if (!data) return [];
+  const ids = new Set(
+    (data.accountSnapshots || [])
+      .filter(snap => snap.snapshotId === snapshotId)
+      .map(snap => snap.accountId)
+  );
+  ids.add(currentAccountId);
+  return data.accounts.filter(account => ids.has(account.id));
 }
 
 export default function PortfolioPage() {
@@ -102,6 +153,10 @@ export default function PortfolioPage() {
   const [importing, setImporting] = useState(false);
   const [csvValidationError, setCsvValidationError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [savingPositionId, setSavingPositionId] = useState<string | null>(null);
+  const [movedTo, setMovedTo] = useState<{ positionId: string; name: string } | null>(null);
+  const [moveError, setMoveError] = useState<{ positionId: string; message: string } | null>(null);
+  const movedToTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const settings = getUserSettings();
@@ -121,6 +176,12 @@ export default function PortfolioPage() {
     loadData();
     loadCashFlows();
     loadBatches();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (movedToTimer.current) clearTimeout(movedToTimer.current);
+    };
   }, []);
 
   async function loadData() {
@@ -307,8 +368,8 @@ export default function PortfolioPage() {
 
     const rate = parseFloat(fxRateInput);
     
-    if (!fxRateInput || isNaN(rate) || rate <= 0) {
-      setFxRateValidationError('请输入大于 0 的汇率');
+    if (!isFxRateString(fxRateInput) || isNaN(rate) || rate <= 0) {
+      setFxRateValidationError('请输入大于 0 的汇率（最多 6 位小数）');
       return;
     }
 
@@ -340,6 +401,39 @@ export default function PortfolioPage() {
       setErrorMessage('更新汇率失败');
     } finally {
       setFxRateSaving(false);
+    }
+  }
+
+  async function handleUpdatePositionAccount(positionId: string, accountId: string, accountName: string) {
+    const current = data?.positions.find(p => p.position.id === positionId);
+    if (current && current.position.accountId === accountId) return;
+
+    setSavingPositionId(positionId);
+    setMoveError(null);
+    try {
+      const res = await fetch(`/api/portfolio/positions/${positionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        await loadData();
+        setMovedTo({ positionId, name: accountName });
+        if (movedToTimer.current) clearTimeout(movedToTimer.current);
+        movedToTimer.current = setTimeout(() => {
+          setMovedTo(prev => (prev?.positionId === positionId ? null : prev));
+        }, 2000);
+      } else if (res.status === 409 && json.error === '目标账户不在同一份数据里') {
+        setMoveError({ positionId, message: '只能移到同一份快照里的账户' });
+      } else {
+        setMoveError({ positionId, message: json.error || '更新账户失败' });
+      }
+    } catch (error) {
+      console.error('Failed to update position account:', error);
+      setMoveError({ positionId, message: '更新账户失败' });
+    } finally {
+      setSavingPositionId(null);
     }
   }
 
@@ -482,6 +576,7 @@ export default function PortfolioPage() {
   }
 
   const latestSnapshotId = data?.snapshots && data.snapshots.length > 0 ? data.snapshots[0].id : null;
+  const accountGroups = buildAccountGroups(data);
 
   return (
     <div className="min-h-screen bg-background">
@@ -637,113 +732,186 @@ export default function PortfolioPage() {
               {activeTab === 'positions' && (
                 <div>
                   <h3 className="text-lg font-semibold text-foreground mb-4">持仓列表</h3>
-                  {data?.positions && data.positions.length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-card-border text-muted">
-                            <th className="text-left py-2">名称</th>
-                            <th className="text-left py-2">代码</th>
-                            <th className="text-right py-2">数量</th>
-                            <th className="text-right py-2">现价</th>
-                            <th className="text-right py-2">市值(JPY)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {data.positions.map((pos, i) => {
-                            const fxRateRaw = pos.position.fxRateToJpy;
-                            let marketValue = '缺汇率';
-                            
-                            if (fxRateRaw && fxRateRaw !== null) {
-                              const value = marketValueJpyFloor({
-                                quantity: pos.position.quantity,
-                                price: pos.position.price,
-                                unitBasis: pos.instrument.unitBasis,
-                                fxRateToJpy: fxRateRaw,
-                              });
-                              marketValue = '¥' + value.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-                            }
-                            
-                            const isEditing = editingFxRate?.currency === pos.instrument.currency;
-                            
-                            return (
-                              <tr key={i} className="border-b border-card-border">
-                                <td className="py-3 text-foreground">{pos.instrument.name}</td>
-                                <td className="py-3 text-muted">{pos.instrument.symbol}</td>
-                                <td className="py-3 text-right font-mono text-foreground">
-                                  {formatQuantity(pos.position.quantity)}
-                                </td>
-                                <td className="py-3 text-right font-mono text-foreground">
-                                  {formatQuantity(pos.position.price)}
-                                </td>
-                                <td className="py-3 text-right">
-                                  {fxRateRaw ? (
-                                    <span className="font-mono text-foreground">{marketValue}</span>
-                                  ) : isEditing ? (
-                                    <div className="flex flex-col items-end gap-2">
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-xs text-muted">1 {pos.instrument.currency} =</span>
-                                        <input
-                                          type="number"
-                                          step="0.01"
-                                          value={fxRateInput}
-                                          onChange={(e) => {
-                                            setFxRateInput(e.target.value);
-                                            setFxRateValidationError(null);
-                                          }}
-                                          placeholder="0.00"
-                                          className="w-20 px-2 py-1 text-xs bg-card-bg border border-card-border rounded text-foreground"
-                                          autoFocus
-                                          disabled={fxRateSaving}
-                                        />
-                                        <span className="text-xs text-muted">JPY</span>
-                                        <button
-                                          onClick={handleSaveFxRate}
-                                          disabled={fxRateSaving}
-                                          className="text-xs px-2 py-1 bg-accent text-background rounded hover:opacity-80 disabled:opacity-50"
-                                        >
-                                          {fxRateSaving ? '保存中…' : '保存'}
-                                        </button>
-                                        <button
-                                          onClick={() => {
-                                            setEditingFxRate(null);
-                                            setFxRateInput('');
-                                            setFxRateValidationError(null);
-                                          }}
-                                          disabled={fxRateSaving}
-                                          className="text-xs px-2 py-1 bg-tile text-muted rounded hover:bg-card-border disabled:opacity-50"
-                                        >
-                                          取消
-                                        </button>
-                                      </div>
-                                      {fxRateValidationError && (
-                                        <p className="text-xs text-down">{fxRateValidationError}</p>
+                  {accountGroups.length > 0 ? (
+                    <div className="space-y-8">
+                      {accountGroups.map((group) => (
+                        <div key={group.accountId}>
+                          <div className="flex items-baseline justify-between gap-3 mb-3">
+                            <div>
+                              <h4 className="text-sm font-medium text-foreground">{group.accountName}</h4>
+                              {group.asOf && (
+                                <p className="text-xs text-muted">截至 {formatAsOfMd(group.asOf)}</p>
+                              )}
+                            </div>
+                            <p className="font-mono text-sm text-foreground">
+                              ¥{group.marketValue.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                            </p>
+                          </div>
+                          {group.positions.length === 0 ? (
+                            <div className="py-6 text-center bg-tile rounded-lg">
+                              <p className="text-muted">
+                                暂无持仓{group.asOf ? ` · 截至 ${formatAsOfMd(group.asOf)}` : ''}
+                              </p>
+                              <p className="font-mono text-sm text-muted mt-1">¥0</p>
+                            </div>
+                          ) : (
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="border-b border-card-border text-muted">
+                                    <th className="text-left py-2">名称</th>
+                                    <th className="text-left py-2">代码</th>
+                                    <th className="text-left py-2">账户</th>
+                                    <th className="text-right py-2">数量</th>
+                                    <th className="text-right py-2">现价</th>
+                                    <th className="text-right py-2">市值(JPY)</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {group.positions.map((pos) => {
+                                    const fxRateRaw = pos.position.fxRateToJpy;
+                                    let marketValue = '缺汇率';
+
+                                    if (fxRateRaw && fxRateRaw !== null) {
+                                      const value = marketValueJpyFloor({
+                                        quantity: pos.position.quantity,
+                                        price: pos.position.price,
+                                        unitBasis: pos.instrument.unitBasis,
+                                        fxRateToJpy: fxRateRaw,
+                                      });
+                                      marketValue = '¥' + value.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                                    }
+
+                                    const isEditing = editingFxRate?.currency === pos.instrument.currency;
+                                    const { title, subtitle } = displayHoldingTitle(
+                                      pos.instrument.assetClass,
+                                      pos.instrument.symbol,
+                                      pos.instrument.name,
+                                    );
+
+                                    return (
+                                      <Fragment key={pos.position.id}>
+                                      <tr className="border-b border-card-border">
+                                        <td className="py-3 text-foreground">
+                                          <div>{title}</div>
+                                          {subtitle && (
+                                            <div className="text-xs text-muted">{subtitle}</div>
+                                          )}
+                                        </td>
+                                        <td className="py-3 text-muted">{pos.instrument.symbol}</td>
+                                        <td className="py-3">
+                                          <div className="flex items-center gap-2">
+                                            <select
+                                              aria-label="所属账户"
+                                              value={pos.position.accountId}
+                                              disabled={savingPositionId === pos.position.id}
+                                              onChange={(e) => {
+                                                const nextId = e.target.value;
+                                                const nextName = (data?.accounts || []).find(a => a.id === nextId)?.name || nextId;
+                                                handleUpdatePositionAccount(pos.position.id, nextId, nextName);
+                                              }}
+                                              className="max-w-[9rem] px-2 py-1 text-xs bg-card-bg border border-card-border rounded text-foreground disabled:opacity-50"
+                                            >
+                                              {accountsInSameSnapshot(data, pos.position.snapshotId, pos.position.accountId).map((account) => (
+                                                <option key={account.id} value={account.id}>
+                                                  {account.name}
+                                                </option>
+                                              ))}
+                                            </select>
+                                            {savingPositionId === pos.position.id && (
+                                              <span className="text-xs text-muted whitespace-nowrap">保存中…</span>
+                                            )}
+                                            {movedTo && movedTo.positionId === pos.position.id && savingPositionId !== pos.position.id && (
+                                              <span className="text-xs text-muted whitespace-nowrap">已移到 {movedTo.name}</span>
+                                            )}
+                                          </div>
+                                        </td>
+                                        <td className="py-3 text-right font-mono text-foreground">
+                                          {formatQuantity(pos.position.quantity)}
+                                        </td>
+                                        <td className="py-3 text-right font-mono text-foreground">
+                                          {formatQuantity(pos.position.price)}
+                                        </td>
+                                        <td className="py-3 text-right">
+                                          {fxRateRaw ? (
+                                            <span className="font-mono text-foreground">{marketValue}</span>
+                                          ) : isEditing ? (
+                                            <div className="flex flex-col items-end gap-2">
+                                              <div className="flex items-center gap-2">
+                                                <span className="text-xs text-muted">1 {pos.instrument.currency} =</span>
+                                                <input
+                                                  type="text"
+                                                  inputMode="decimal"
+                                                  value={fxRateInput}
+                                                  onChange={(e) => {
+                                                    setFxRateInput(e.target.value);
+                                                    setFxRateValidationError(null);
+                                                  }}
+                                                  placeholder="0.00"
+                                                  className="w-20 px-2 py-1 text-xs bg-card-bg border border-card-border rounded text-foreground"
+                                                  autoFocus
+                                                  disabled={fxRateSaving}
+                                                />
+                                                <span className="text-xs text-muted">JPY</span>
+                                                <button
+                                                  onClick={handleSaveFxRate}
+                                                  disabled={fxRateSaving}
+                                                  className="text-xs px-2 py-1 bg-accent text-background rounded hover:opacity-80 disabled:opacity-50"
+                                                >
+                                                  {fxRateSaving ? '保存中…' : '保存'}
+                                                </button>
+                                                <button
+                                                  onClick={() => {
+                                                    setEditingFxRate(null);
+                                                    setFxRateInput('');
+                                                    setFxRateValidationError(null);
+                                                  }}
+                                                  disabled={fxRateSaving}
+                                                  className="text-xs px-2 py-1 bg-tile text-muted rounded hover:bg-card-border disabled:opacity-50"
+                                                >
+                                                  取消
+                                                </button>
+                                              </div>
+                                              {fxRateValidationError && (
+                                                <p className="text-xs text-down">{fxRateValidationError}</p>
+                                              )}
+                                              <p className="text-xs text-muted">将用于本快照所有 {pos.instrument.currency} 持仓和现金</p>
+                                            </div>
+                                          ) : (
+                                            <div className="flex items-center justify-end gap-2 text-warn">
+                                              <span>缺少汇率，未计入总资产</span>
+                                              {latestSnapshotId && (
+                                                <button
+                                                  onClick={() => {
+                                                    setEditingFxRate({ snapshotId: latestSnapshotId, currency: pos.instrument.currency });
+                                                    setFxRateInput('');
+                                                    setFxRateValidationError(null);
+                                                  }}
+                                                  className="text-xs px-2 py-1 bg-accent text-background rounded hover:opacity-80 whitespace-nowrap"
+                                                >
+                                                  补汇率
+                                                </button>
+                                              )}
+                                            </div>
+                                          )}
+                                        </td>
+                                      </tr>
+                                      {moveError && moveError.positionId === pos.position.id && (
+                                        <tr>
+                                          <td colSpan={6} className="pb-3 pt-0">
+                                            <p className="text-xs text-down">{moveError.message}</p>
+                                          </td>
+                                        </tr>
                                       )}
-                                      <p className="text-xs text-muted">将用于本快照所有 {pos.instrument.currency} 持仓和现金</p>
-                                    </div>
-                                  ) : (
-                                    <div className="flex items-center justify-end gap-2 text-warn">
-                                      <span>缺少汇率，未计入总资产</span>
-                                      {latestSnapshotId && (
-                                        <button
-                                          onClick={() => {
-                                            setEditingFxRate({ snapshotId: latestSnapshotId, currency: pos.instrument.currency });
-                                            setFxRateInput('');
-                                            setFxRateValidationError(null);
-                                          }}
-                                          className="text-xs px-2 py-1 bg-accent text-background rounded hover:opacity-80 whitespace-nowrap"
-                                        >
-                                          补汇率
-                                        </button>
-                                      )}
-                                    </div>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                                      </Fragment>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   ) : (
                     <div className="text-center py-12">
@@ -1062,7 +1230,7 @@ export default function PortfolioPage() {
                         将更新以上 {csvPreview.accountSummaries.length} 个账户的持仓，其他账户（如美股）不变
                       </p>
                       
-                      {csvErrors.length === 0 && csvPreview.totalRows > 0 ? (
+                      {csvErrors.length === 0 && csvPreview.accountSummaries.length > 0 ? (
                         <button
                           onClick={handleCSVImport}
                           disabled={importing}
@@ -1072,8 +1240,8 @@ export default function PortfolioPage() {
                         </button>
                       ) : (
                         <div className="mt-3">
-                          {csvPreview.totalRows === 0 ? (
-                            <p className="text-xs text-muted mb-1">没有可导入的持仓</p>
+                          {csvPreview.accountSummaries.length === 0 ? (
+                            <p className="text-xs text-muted mb-1">没有可导入的账户</p>
                           ) : (
                             <p className="text-xs text-down mb-1">有错误，无法导入</p>
                           )}
@@ -1130,6 +1298,7 @@ export default function PortfolioPage() {
                       <option value="cash">现金</option>
                       <option value="other">其他</option>
                     </select>
+                    <p className="text-xs text-warn">保存后会替换该账户在这个日期的全部持仓和现金</p>
                     <div className="flex gap-2">
                       <button
                         onClick={handleCreateAccount}

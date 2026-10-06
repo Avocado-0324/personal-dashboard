@@ -1,5 +1,6 @@
 export type PortfolioData = {
   asOf: string; // ISO date
+  asOfRangeLabel: string | null;
   baseCurrency: 'JPY';
   totalJpy: string;
   netContributionJpy: string;
@@ -22,10 +23,12 @@ export type PortfolioData = {
   topHoldings: Array<{
     symbol: string;
     name: string;
+    assetClass: string;
+    currency: string;
     valueJpy: string;
     unrealizedPnlJpy: string;
     pnlRatio: string;
-    accountType: string;
+    accountBreakdown: string;
   }>;
   stale: boolean;
 };
@@ -35,6 +38,7 @@ export type PortfolioSummary = {
   pnlJpy: string;
   xirr: string | null;
   asOf: string;
+  asOfRangeLabel: string | null;
   missingFxCount: number;
 };
 
