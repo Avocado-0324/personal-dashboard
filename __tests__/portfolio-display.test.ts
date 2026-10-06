@@ -7,6 +7,8 @@ import {
   mergeHoldingsByInstrument,
   buildTaxAllocation,
   displayHoldingTitle,
+  formatQuantity,
+  TAX_SEGMENT_COLORS,
 } from '../modules/portfolio/display';
 import { isFxRateString, isCurrencyCode, isUuid } from '../lib/validation';
 
@@ -34,6 +36,7 @@ describe('display helpers', () => {
         value: new Decimal(1000),
         unrealizedPnl: new Decimal(10),
         accountType: 'tokutei',
+        quantity: '2',
       },
       {
         symbol: 'VOO',
@@ -43,6 +46,7 @@ describe('display helpers', () => {
         value: new Decimal(500),
         unrealizedPnl: new Decimal(5),
         accountType: 'nisa_growth',
+        quantity: '1',
       },
       {
         symbol: 'VOO',
@@ -52,15 +56,44 @@ describe('display helpers', () => {
         value: new Decimal(200),
         unrealizedPnl: new Decimal(1),
         accountType: 'tokutei',
+        quantity: '3',
       },
     ]);
 
     expect(merged).toHaveLength(2);
     const usd = merged.find(h => h.currency === 'USD');
     expect(usd?.value.toString()).toBe('1500');
-    expect(usd?.tokuteiCount).toBe(1);
-    expect(usd?.nisaCount).toBe(1);
-    expect(formatAccountBreakdown(usd!.tokuteiCount, usd!.nisaCount)).toBe('特定 1 · NISA 1');
+    expect(usd?.tokuteiQty.toString()).toBe('2');
+    expect(usd?.nisaQty.toString()).toBe('1');
+    expect(formatAccountBreakdown(usd!.tokuteiQty, usd!.nisaQty)).toBe('特定 2 · NISA 1');
+  });
+
+  it('同一代码同一币种按持有数量显示 特定 7 · NISA 10', () => {
+    const merged = mergeHoldingsByInstrument([
+      {
+        symbol: 'NVDA',
+        name: 'エヌビディア',
+        currency: 'USD',
+        assetClass: 'us_stock',
+        value: new Decimal(700),
+        unrealizedPnl: new Decimal(0),
+        accountType: 'tokutei',
+        quantity: '7',
+      },
+      {
+        symbol: 'NVDA',
+        name: 'エヌビディア',
+        currency: 'USD',
+        assetClass: 'us_stock',
+        value: new Decimal(1000),
+        unrealizedPnl: new Decimal(0),
+        accountType: 'nisa_growth',
+        quantity: '10',
+      },
+    ]);
+
+    expect(merged).toHaveLength(1);
+    expect(formatAccountBreakdown(merged[0].tokuteiQty, merged[0].nisaQty)).toBe('特定 7 · NISA 10');
   });
 
   it('美股代码作主名，片假名作副标题', () => {
@@ -89,6 +122,25 @@ describe('display helpers', () => {
     expect(alloc.find(a => a.accountType === 'nisa')?.valueJpy).toBe('50');
     expect(alloc.find(a => a.accountType === 'tokutei')?.valueJpy).toBe('100');
     expect(alloc.find(a => a.accountType === 'cash')?.valueJpy).toBe('50');
+  });
+
+  it('税制颜色按 key 固定，NISA 为 0 时特定仍用 accent/45', () => {
+    expect(TAX_SEGMENT_COLORS.nisa.bar).toBe('bg-accent');
+    expect(TAX_SEGMENT_COLORS.tokutei.bar).toBe('bg-accent/45');
+    expect(TAX_SEGMENT_COLORS.cash.bar).toBe('bg-muted/50');
+    const alloc = buildTaxAllocation({
+      holdings: [{ accountType: 'tokutei', value: new Decimal(100) }],
+      cashTotal: new Decimal(50),
+      totalValue: new Decimal(150),
+    });
+    expect(alloc.map(a => a.accountType)).toEqual(['tokutei', 'cash']);
+    expect(TAX_SEGMENT_COLORS[alloc[0].accountType as 'tokutei'].bar).toBe('bg-accent/45');
+    expect(TAX_SEGMENT_COLORS[alloc[1].accountType as 'cash'].bar).toBe('bg-muted/50');
+  });
+
+  it('formatQuantity 整数加千分位', () => {
+    expect(formatQuantity('7')).toBe('7');
+    expect(formatQuantity('10000')).toBe('10,000');
   });
 });
 

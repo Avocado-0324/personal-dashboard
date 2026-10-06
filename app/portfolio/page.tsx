@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import Link from 'next/link';
 import Decimal from 'decimal.js';
 import { calculateXIRR, marketValueJpyFloor, cashValueJpyFloor } from '@/modules/portfolio/calculations';
 import { getUserSettings } from '@/lib/user-settings';
 import { getAllModules } from '@/lib/module-registry';
-import { formatAsOfMd, displayHoldingTitle } from '@/modules/portfolio/display';
+import { formatAsOfMd, displayHoldingTitle, formatQuantity } from '@/modules/portfolio/display';
 import { isFxRateString } from '@/lib/validation';
 
 type Account = {
@@ -49,26 +49,6 @@ type Batch = {
   status: string;
   createdAt: string;
 };
-
-// 格式化数量：整数不带小数，小数最多4位并去除末尾0，加千分位
-function formatQuantity(qty: string): string {
-  const num = new Decimal(qty);
-  const isInteger = num.modulo(1).isZero();
-  
-  if (isInteger) {
-    // 整数：无小数点，加千分位
-    return num.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  } else {
-    // 小数：最多4位，去除末尾0
-    let formatted = num.toFixed(4);
-    // 去除末尾多余的0
-    formatted = formatted.replace(/0+$/, '').replace(/\.$/, '');
-    // 添加千分位（整数部分）
-    const parts = formatted.split('.');
-    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    return parts.join('.');
-  }
-}
 
 type AccountGroup = {
   accountId: string;
@@ -123,6 +103,17 @@ function buildAccountGroups(data: Data | null): AccountGroup[] {
   );
 }
 
+function accountsInSameSnapshot(data: Data | null, snapshotId: string, currentAccountId: string): Account[] {
+  if (!data) return [];
+  const ids = new Set(
+    (data.accountSnapshots || [])
+      .filter(snap => snap.snapshotId === snapshotId)
+      .map(snap => snap.accountId)
+  );
+  ids.add(currentAccountId);
+  return data.accounts.filter(account => ids.has(account.id));
+}
+
 export default function PortfolioPage() {
   const [activeTab, setActiveTab] = useState<'positions' | 'cashflows' | 'snapshots' | 'imports'>('positions');
   const [data, setData] = useState<Data | null>(null);
@@ -162,6 +153,10 @@ export default function PortfolioPage() {
   const [importing, setImporting] = useState(false);
   const [csvValidationError, setCsvValidationError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [savingPositionId, setSavingPositionId] = useState<string | null>(null);
+  const [movedTo, setMovedTo] = useState<{ positionId: string; name: string } | null>(null);
+  const [moveError, setMoveError] = useState<{ positionId: string; message: string } | null>(null);
+  const movedToTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const settings = getUserSettings();
@@ -181,6 +176,12 @@ export default function PortfolioPage() {
     loadData();
     loadCashFlows();
     loadBatches();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (movedToTimer.current) clearTimeout(movedToTimer.current);
+    };
   }, []);
 
   async function loadData() {
@@ -403,7 +404,12 @@ export default function PortfolioPage() {
     }
   }
 
-  async function handleUpdatePositionAccount(positionId: string, accountId: string) {
+  async function handleUpdatePositionAccount(positionId: string, accountId: string, accountName: string) {
+    const current = data?.positions.find(p => p.position.id === positionId);
+    if (current && current.position.accountId === accountId) return;
+
+    setSavingPositionId(positionId);
+    setMoveError(null);
     try {
       const res = await fetch(`/api/portfolio/positions/${positionId}`, {
         method: 'PATCH',
@@ -412,13 +418,22 @@ export default function PortfolioPage() {
       });
       const json = await res.json();
       if (res.ok) {
-        loadData();
+        await loadData();
+        setMovedTo({ positionId, name: accountName });
+        if (movedToTimer.current) clearTimeout(movedToTimer.current);
+        movedToTimer.current = setTimeout(() => {
+          setMovedTo(prev => (prev?.positionId === positionId ? null : prev));
+        }, 2000);
+      } else if (res.status === 409 && json.error === '目标账户不在同一份数据里') {
+        setMoveError({ positionId, message: '只能移到同一份快照里的账户' });
       } else {
-        setErrorMessage(`更新账户失败：${json.error || '未知错误'}`);
+        setMoveError({ positionId, message: json.error || '更新账户失败' });
       }
     } catch (error) {
       console.error('Failed to update position account:', error);
-      setErrorMessage('更新账户失败');
+      setMoveError({ positionId, message: '更新账户失败' });
+    } finally {
+      setSavingPositionId(null);
     }
   }
 
@@ -775,7 +790,8 @@ export default function PortfolioPage() {
                                     );
 
                                     return (
-                                      <tr key={pos.position.id} className="border-b border-card-border">
+                                      <Fragment key={pos.position.id}>
+                                      <tr className="border-b border-card-border">
                                         <td className="py-3 text-foreground">
                                           <div>{title}</div>
                                           {subtitle && (
@@ -784,17 +800,31 @@ export default function PortfolioPage() {
                                         </td>
                                         <td className="py-3 text-muted">{pos.instrument.symbol}</td>
                                         <td className="py-3">
-                                          <select
-                                            value={pos.position.accountId}
-                                            onChange={(e) => handleUpdatePositionAccount(pos.position.id, e.target.value)}
-                                            className="max-w-[9rem] px-2 py-1 text-xs bg-card-bg border border-card-border rounded text-foreground"
-                                          >
-                                            {(data?.accounts || []).map((account) => (
-                                              <option key={account.id} value={account.id}>
-                                                {account.name}
-                                              </option>
-                                            ))}
-                                          </select>
+                                          <div className="flex items-center gap-2">
+                                            <select
+                                              aria-label="所属账户"
+                                              value={pos.position.accountId}
+                                              disabled={savingPositionId === pos.position.id}
+                                              onChange={(e) => {
+                                                const nextId = e.target.value;
+                                                const nextName = (data?.accounts || []).find(a => a.id === nextId)?.name || nextId;
+                                                handleUpdatePositionAccount(pos.position.id, nextId, nextName);
+                                              }}
+                                              className="max-w-[9rem] px-2 py-1 text-xs bg-card-bg border border-card-border rounded text-foreground disabled:opacity-50"
+                                            >
+                                              {accountsInSameSnapshot(data, pos.position.snapshotId, pos.position.accountId).map((account) => (
+                                                <option key={account.id} value={account.id}>
+                                                  {account.name}
+                                                </option>
+                                              ))}
+                                            </select>
+                                            {savingPositionId === pos.position.id && (
+                                              <span className="text-xs text-muted whitespace-nowrap">保存中…</span>
+                                            )}
+                                            {movedTo && movedTo.positionId === pos.position.id && savingPositionId !== pos.position.id && (
+                                              <span className="text-xs text-muted whitespace-nowrap">已移到 {movedTo.name}</span>
+                                            )}
+                                          </div>
                                         </td>
                                         <td className="py-3 text-right font-mono text-foreground">
                                           {formatQuantity(pos.position.quantity)}
@@ -866,6 +896,14 @@ export default function PortfolioPage() {
                                           )}
                                         </td>
                                       </tr>
+                                      {moveError && moveError.positionId === pos.position.id && (
+                                        <tr>
+                                          <td colSpan={6} className="pb-3 pt-0">
+                                            <p className="text-xs text-down">{moveError.message}</p>
+                                          </td>
+                                        </tr>
+                                      )}
+                                      </Fragment>
                                     );
                                   })}
                                 </tbody>
@@ -1260,6 +1298,7 @@ export default function PortfolioPage() {
                       <option value="cash">现金</option>
                       <option value="other">其他</option>
                     </select>
+                    <p className="text-xs text-warn">保存后会替换该账户在这个日期的全部持仓和现金</p>
                     <div className="flex gap-2">
                       <button
                         onClick={handleCreateAccount}

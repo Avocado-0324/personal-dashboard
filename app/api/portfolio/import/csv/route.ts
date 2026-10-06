@@ -129,6 +129,7 @@ export async function POST(request: NextRequest) {
     }
 
     try {
+      let createdBatchId: string | undefined;
       // 事务开始
       await db.transaction(async (tx) => {
         // 文件里出现过的每个账户都要落 snapshot_accounts（0 条持仓的空段也要写）
@@ -180,6 +181,7 @@ export async function POST(request: NextRequest) {
             status: 'committed',
           })
           .returning();
+        createdBatchId = batch.id;
 
         // 创建快照
         const [snapshot] = await tx
@@ -244,6 +246,7 @@ export async function POST(request: NextRequest) {
           imported: parsedPositions.length,
           errors: [],
           skipped: 0,
+          batchId: createdBatchId,
         },
         { headers: { 'Cache-Control': 'no-store' } }
       );

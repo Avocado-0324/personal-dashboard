@@ -4,13 +4,7 @@ import Link from 'next/link';
 import type { ModuleLoadResult } from '@/lib/module-types';
 import type { PortfolioData } from './types';
 import Decimal from 'decimal.js';
-import { displayHoldingTitle } from './display';
-
-const ALLOCATION_SEGMENT_COLORS = [
-  { bar: 'bg-accent', text: 'text-accent' },
-  { bar: 'bg-up', text: 'text-up' },
-  { bar: 'bg-warn', text: 'text-warn' },
-] as const;
+import { displayHoldingTitle, TAX_SEGMENT_COLORS, type TaxAllocationKey } from './display';
 
 export function PortfolioCard({ 
   result, 
@@ -147,8 +141,8 @@ export function PortfolioCard({
       <div className="mb-2">
         <p className="text-xs text-muted mb-2">按税制</p>
         <div className="h-3 flex rounded-full overflow-hidden bg-tile">
-          {data.allocationByAccount.map((alloc, i) => {
-            const color = ALLOCATION_SEGMENT_COLORS[i % ALLOCATION_SEGMENT_COLORS.length];
+          {data.allocationByAccount.map((alloc) => {
+            const color = TAX_SEGMENT_COLORS[alloc.accountType as TaxAllocationKey] ?? TAX_SEGMENT_COLORS.tokutei;
             const ratio = new Decimal(alloc.ratio).times(100).toNumber();
             
             return (
@@ -162,8 +156,8 @@ export function PortfolioCard({
           })}
         </div>
         <div className="flex flex-wrap gap-3 mt-2 text-xs">
-          {data.allocationByAccount.map((alloc, i) => {
-            const color = ALLOCATION_SEGMENT_COLORS[i % ALLOCATION_SEGMENT_COLORS.length];
+          {data.allocationByAccount.map((alloc) => {
+            const color = TAX_SEGMENT_COLORS[alloc.accountType as TaxAllocationKey] ?? TAX_SEGMENT_COLORS.tokutei;
             const ratio = new Decimal(alloc.ratio).times(100);
             
             return (

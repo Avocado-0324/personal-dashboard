@@ -9,6 +9,7 @@ export type HoldingForMerge = {
   value: Decimal;
   unrealizedPnl: Decimal;
   accountType: string;
+  quantity: string | Decimal;
 };
 
 export type MergedHolding = {
@@ -18,9 +19,24 @@ export type MergedHolding = {
   assetClass: string;
   value: Decimal;
   unrealizedPnl: Decimal;
-  tokuteiCount: number;
-  nisaCount: number;
+  tokuteiQty: Decimal;
+  nisaQty: Decimal;
 };
+
+export function formatQuantity(qty: string | Decimal): string {
+  const num = qty instanceof Decimal ? qty : new Decimal(qty);
+  const isInteger = num.modulo(1).isZero();
+
+  if (isInteger) {
+    return num.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+
+  let formatted = num.toFixed(4);
+  formatted = formatted.replace(/0+$/, '').replace(/\.$/, '');
+  const parts = formatted.split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return parts.join('.');
+}
 
 export function formatAsOfMd(isoDate: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(isoDate);
@@ -34,10 +50,12 @@ export function formatAsOfRangeLabel(asOfDates: string[]): string | null {
   return `数据日期 ${formatAsOfMd(unique[0])}–${formatAsOfMd(unique[unique.length - 1])}`;
 }
 
-export function formatAccountBreakdown(tokuteiCount: number, nisaCount: number): string {
+export function formatAccountBreakdown(tokuteiQty: Decimal | string | number, nisaQty: Decimal | string | number): string {
+  const tokutei = tokuteiQty instanceof Decimal ? tokuteiQty : new Decimal(tokuteiQty);
+  const nisa = nisaQty instanceof Decimal ? nisaQty : new Decimal(nisaQty);
   const parts: string[] = [];
-  if (tokuteiCount > 0) parts.push(`特定 ${tokuteiCount}`);
-  if (nisaCount > 0) parts.push(`NISA ${nisaCount}`);
+  if (tokutei.gt(0)) parts.push(`特定 ${formatQuantity(tokutei)}`);
+  if (nisa.gt(0)) parts.push(`NISA ${formatQuantity(nisa)}`);
   return parts.join(' · ');
 }
 
@@ -51,8 +69,9 @@ export function mergeHoldingsByInstrument(holdings: HoldingForMerge[]): MergedHo
   for (const holding of holdings) {
     const key = `${holding.symbol}\0${holding.currency}`;
     const existing = merged.get(key);
-    const tokuteiInc = holding.accountType === 'tokutei' ? 1 : 0;
-    const nisaInc = isNisaType(holding.accountType) ? 1 : 0;
+    const qty = holding.quantity instanceof Decimal ? holding.quantity : new Decimal(holding.quantity);
+    const tokuteiInc = holding.accountType === 'tokutei' ? qty : new Decimal(0);
+    const nisaInc = isNisaType(holding.accountType) ? qty : new Decimal(0);
 
     if (!existing) {
       merged.set(key, {
@@ -62,16 +81,16 @@ export function mergeHoldingsByInstrument(holdings: HoldingForMerge[]): MergedHo
         assetClass: holding.assetClass,
         value: holding.value,
         unrealizedPnl: holding.unrealizedPnl,
-        tokuteiCount: tokuteiInc,
-        nisaCount: nisaInc,
+        tokuteiQty: tokuteiInc,
+        nisaQty: nisaInc,
       });
       continue;
     }
 
     existing.value = existing.value.plus(holding.value);
     existing.unrealizedPnl = existing.unrealizedPnl.plus(holding.unrealizedPnl);
-    existing.tokuteiCount += tokuteiInc;
-    existing.nisaCount += nisaInc;
+    existing.tokuteiQty = existing.tokuteiQty.plus(tokuteiInc);
+    existing.nisaQty = existing.nisaQty.plus(nisaInc);
   }
 
   return Array.from(merged.values()).sort((a, b) => b.value.minus(a.value).toNumber());
@@ -88,6 +107,12 @@ export const TAX_ALLOCATION_LABELS: Record<TaxAllocationKey, string> = {
   nisa: 'NISA',
   tokutei: '特定',
   cash: '现金',
+};
+
+export const TAX_SEGMENT_COLORS: Record<TaxAllocationKey, { bar: string; text: string }> = {
+  nisa: { bar: 'bg-accent', text: 'text-accent' },
+  tokutei: { bar: 'bg-accent/45', text: 'text-accent/45' },
+  cash: { bar: 'bg-muted/50', text: 'text-muted/50' },
 };
 
 export function taxBucketForAccountType(accountType: string): Exclude<TaxAllocationKey, 'cash'> | null {

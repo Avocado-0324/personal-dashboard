@@ -87,6 +87,7 @@ export async function loadPortfolioData(): Promise<PortfolioData | null> {
       value,
       unrealizedPnl,
       accountType: account.type,
+      quantity: position.quantity,
     });
   }
 
@@ -172,7 +173,7 @@ export async function loadPortfolioData(): Promise<PortfolioData | null> {
         const cost = h.value.minus(h.unrealizedPnl);
         return cost.gt(0) ? h.unrealizedPnl.div(cost).toFixed(4) : '0';
       })(),
-      accountBreakdown: formatAccountBreakdown(h.tokuteiCount, h.nisaCount),
+      accountBreakdown: formatAccountBreakdown(h.tokuteiQty, h.nisaQty),
     }));
 
   return {
