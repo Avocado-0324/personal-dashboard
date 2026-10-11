@@ -72,6 +72,13 @@ GOOGLE_CLIENT_SECRET=your-google-client-secret
 
 GITHUB_CLIENT_ID=your-github-client-id
 GITHUB_CLIENT_SECRET=your-github-client-secret
+
+# LINE Messaging API webhook（家庭群 @秋宝管家 -> Grok Bot）
+LINE_CHANNEL_SECRET=
+GROKBOT_WEBHOOK_URL=
+GROKBOT_WEBHOOK_KEY=
+# 可选：只转发该群的提及
+LINE_ALLOWED_GROUP_ID=
 ```
 
 生成 `AUTH_SECRET`：
@@ -79,6 +86,14 @@ GITHUB_CLIENT_SECRET=your-github-client-secret
 ```bash
 openssl rand -base64 32
 ```
+
+#### LINE Messaging API webhook
+
+家庭群有人 @秋宝管家 时，未登录的 `POST /api/line/webhook` 校验 `x-line-signature`，只把群内文本提及转发给 Grok Bot（本路由不回复 LINE）。生产环境把下列 URL 填到 LINE Developers 的 Webhook：
+
+`https://personal-dashboard-pi-nine.vercel.app/api/line/webhook`
+
+Vercel 需要配置：`LINE_CHANNEL_SECRET`、`GROKBOT_WEBHOOK_URL`、`GROKBOT_WEBHOOK_KEY`。可选：`LINE_ALLOWED_GROUP_ID`（只转发该群）。
 
 ### 3. 启动开发服务器
 
