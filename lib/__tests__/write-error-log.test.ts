@@ -11,7 +11,7 @@ describe('write-error-log', () => {
     const error = new Error('connect failed');
     (error as Error & { cause: { code: string } }).cause = { code: 'ECONNRESET' };
 
-    logWriteError('/api/portfolio/ingest', 'connect', error);
+    logWriteError('/api/portfolio/ingest', 'write', error);
 
     expect(errorSpy).toHaveBeenCalledTimes(1);
     const line = String(errorSpy.mock.calls[0][0]);
@@ -19,7 +19,7 @@ describe('write-error-log', () => {
     const parsed = JSON.parse(line);
     expect(parsed).toMatchObject({
       route: '/api/portfolio/ingest',
-      stage: 'connect',
+      stage: 'write',
       errorType: 'Error',
       message: 'connect failed',
       code: 'ECONNRESET',

@@ -1,4 +1,4 @@
-export type WriteErrorStage = 'parse' | 'connect' | 'transaction' | 'other';
+export type WriteErrorStage = 'parse' | 'write' | 'other';
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : null;

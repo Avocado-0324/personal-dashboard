@@ -1,7 +1,7 @@
 import { snapshotAccounts } from '@/db/schema';
 
 type Insertable = {
-  insert: ReturnType<typeof import('@/db/client').getPoolDb>['insert'];
+  insert: ReturnType<typeof import('@/db/client').getDb>['insert'];
 };
 
 export async function recordSnapshotAccounts(

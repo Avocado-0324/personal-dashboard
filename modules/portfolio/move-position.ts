@@ -32,8 +32,8 @@ export function isUniqueConstraintError(err: unknown): boolean {
 }
 
 type MoveTx = {
-  select: ReturnType<typeof import('@/db/client').getPoolDb>['select'];
-  update: ReturnType<typeof import('@/db/client').getPoolDb>['update'];
+  select: ReturnType<typeof import('@/db/client').getDb>['select'];
+  update: ReturnType<typeof import('@/db/client').getDb>['update'];
 };
 
 export type MovePositionOk = {

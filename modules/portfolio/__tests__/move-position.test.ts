@@ -2,7 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { getPoolDb } from '@/db/client';
 import { accounts, snapshots, instruments, positions, snapshotAccounts, cashBalances } from '@/db/schema';
 import { getLatestPositionsByAccount, getLatestCashBalancesByAccount } from '../queries';
-import { isTargetInSameSnapshot, movePositionToAccount, MOVE_NOT_IN_SNAPSHOT_ERROR, MOVE_DUPLICATE_INSTRUMENT_ERROR, hasSameInstrumentInTarget, isUniqueConstraintError } from '../move-position';
+import { isTargetInSameSnapshot, MOVE_NOT_IN_SNAPSHOT_ERROR, MOVE_DUPLICATE_INSTRUMENT_ERROR, hasSameInstrumentInTarget, isUniqueConstraintError } from '../move-position';
+import { movePositionHttp } from '../http-writes';
 import { eq } from 'drizzle-orm';
 
 describe('isTargetInSameSnapshot', () => {
@@ -150,9 +151,7 @@ describeDb('movePositionToAccount integration', () => {
     const usBefore = beforePositions.filter(p => p.position.accountId === usAccount);
     const usCashBefore = beforeCash.filter(c => c.cash.accountId === usAccount);
 
-    const result = await db.transaction(async (tx) => {
-      return movePositionToAccount(tx, jpPosition, usAccount);
-    });
+    const result = await movePositionHttp(jpPosition, usAccount);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {

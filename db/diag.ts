@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { getDb, getPool, isDatabaseConfigured } from './client';
+import { getDb, getHttpSql, isDatabaseConfigured } from './client';
 import { extractWriteErrorFields } from '@/lib/write-error-log';
 
 export type DiagStepResult = {
@@ -33,33 +33,17 @@ export async function probeHttpSelect1(): Promise<DiagStepResult> {
   }
 }
 
-export async function probeWsPoolConnect(): Promise<DiagStepResult> {
+export async function probeHttpTransaction(): Promise<DiagStepResult> {
   const startedAt = Date.now();
   try {
-    const pool = getPool();
-    const client = await pool.connect();
-    try {
-      await client.query('select 1');
-    } finally {
-      client.release();
+    if (!isDatabaseConfigured()) {
+      throw new Error('DATABASE_URL not configured');
     }
-    return { ok: true, ms: Date.now() - startedAt };
-  } catch (error) {
-    return failedStep(startedAt, error);
-  }
-}
-
-export async function probeWsEmptyTransaction(): Promise<DiagStepResult> {
-  const startedAt = Date.now();
-  try {
-    const pool = getPool();
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      await client.query('ROLLBACK');
-    } finally {
-      client.release();
-    }
+    const neonSql = getHttpSql();
+    await neonSql.transaction([
+      neonSql`select 1`,
+      neonSql`select 1`,
+    ], { readOnly: true });
     return { ok: true, ms: Date.now() - startedAt };
   } catch (error) {
     return failedStep(startedAt, error);
