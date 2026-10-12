@@ -7,6 +7,9 @@ import { timingSafeEqual } from 'crypto';
 import { isUniqueViolation } from '@/db/utils';
 import { recordSnapshotAccounts } from '@/modules/portfolio/snapshot-accounts';
 import { CURRENCY_RE } from '@/lib/validation';
+import { logWriteError } from '@/lib/write-error-log';
+
+const INGEST_ROUTE = '/api/portfolio/ingest';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,9 +56,9 @@ export async function POST(request: NextRequest) {
     const expectedKey = process.env.PORTFOLIO_INGEST_KEY;
 
     if (!expectedKey || expectedKey.length < 32) {
-      console.error('PORTFOLIO_INGEST_KEY not configured or too short');
+      logWriteError(INGEST_ROUTE, 'other', new Error('PORTFOLIO_INGEST_KEY not configured or too short'));
       return NextResponse.json(
-        { error: 'Server configuration error' },
+        { error: '写入失败' },
         { status: 500 }
       );
     }
@@ -88,26 +91,50 @@ export async function POST(request: NextRequest) {
     }
 
     if (!isDatabaseConfigured()) {
+      logWriteError(INGEST_ROUTE, 'connect', new Error('DATABASE_URL not configured'));
       return NextResponse.json(
-        { error: 'Database not configured' },
+        { error: '写入失败' },
         { status: 500 }
       );
     }
 
-    const body = await request.json();
-    const data = IngestSchema.parse(body);
+    let data: z.infer<typeof IngestSchema>;
+    try {
+      const body = await request.json();
+      data = IngestSchema.parse(body);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return NextResponse.json(
+          { error: 'Invalid request data', details: error.issues },
+          { status: 400 }
+        );
+      }
+      logWriteError(INGEST_ROUTE, 'parse', error);
+      return NextResponse.json(
+        { error: '写入失败' },
+        { status: 500 }
+      );
+    }
 
-    const db = getPoolDb();
-
-    // 检查 idempotency key（只对未撤销的批次）
-    const existingBatches = await db
-      .select()
-      .from(importBatches)
-      .where(and(
-        eq(importBatches.idempotencyKey, data.idempotencyKey),
-        sql`${importBatches.status} <> 'reverted'`
-      ))
-      .limit(1);
+    let db: ReturnType<typeof getPoolDb>;
+    let existingBatches: Array<typeof importBatches.$inferSelect>;
+    try {
+      db = getPoolDb();
+      existingBatches = await db
+        .select()
+        .from(importBatches)
+        .where(and(
+          eq(importBatches.idempotencyKey, data.idempotencyKey),
+          sql`${importBatches.status} <> 'reverted'`
+        ))
+        .limit(1);
+    } catch (error) {
+      logWriteError(INGEST_ROUTE, 'connect', error);
+      return NextResponse.json(
+        { error: '写入失败' },
+        { status: 500 }
+      );
+    }
     
     const existingBatch = existingBatches[0];
 
@@ -390,9 +417,9 @@ export async function POST(request: NextRequest) {
       }
       
       // 其他事务失败
-      console.error('Transaction failed:', txError);
+      logWriteError(INGEST_ROUTE, 'transaction', txError);
       return NextResponse.json(
-        { error: 'Transaction failed' },
+        { error: '写入失败' },
         { status: 500 }
       );
     }
@@ -404,9 +431,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.error('Ingest error:', error);
+    logWriteError(INGEST_ROUTE, 'other', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: '写入失败' },
       { status: 500 }
     );
   }

@@ -8,6 +8,10 @@ import { getUserSettings } from '@/lib/user-settings';
 import { getAllModules } from '@/lib/module-registry';
 import { formatAsOfMd, displayHoldingTitle, formatQuantity } from '@/modules/portfolio/display';
 import { isFxRateString } from '@/lib/validation';
+import {
+  CSV_IMPORT_SERVER_FAILURE_MESSAGE,
+  submitCsvImport,
+} from '@/modules/portfolio/import/csv-import-client';
 
 type Account = {
   id: string;
@@ -153,6 +157,7 @@ export default function PortfolioPage() {
   const [importing, setImporting] = useState(false);
   const [csvValidationError, setCsvValidationError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [csvWriteFailed, setCsvWriteFailed] = useState(false);
   const [savingPositionId, setSavingPositionId] = useState<string | null>(null);
   const [movedTo, setMovedTo] = useState<{ positionId: string; name: string } | null>(null);
   const [moveError, setMoveError] = useState<{ positionId: string; message: string } | null>(null);
@@ -307,36 +312,27 @@ export default function PortfolioPage() {
     setCsvValidationError(null);
 
     setImporting(true);
-
-    const formData = new FormData();
-    formData.append('file', csvFile);
-    formData.append('asOf', csvAsOf);
+    setCsvWriteFailed(false);
 
     try {
-      const res = await fetch('/api/portfolio/import/csv', {
-        method: 'POST',
-        body: formData,
-      });
-      
-      const json = await res.json();
-      if (res.ok) {
-        if (json.alreadyImported) {
-          setImportWarning({ message: json.message, batchId: json.batchId });
+      const outcome = await submitCsvImport({ file: csvFile, asOf: csvAsOf });
+      if (outcome.status === 'ok') {
+        if (outcome.alreadyImported) {
+          setImportWarning({ message: outcome.message || '', batchId: outcome.batchId || '' });
         } else {
-          setSuccessMessage(`导入完成：${json.imported} 条`);
+          setSuccessMessage(`导入完成：${outcome.imported} 条`);
         }
         setCsvFile(null);
         setCsvPreview(null);
         setCsvErrors([]);
         loadData();
         loadBatches();
+      } else if (outcome.status === 'server-failure') {
+        setCsvWriteFailed(true);
       } else {
-        setCsvErrors(json.errors || [{ row: 0, message: json.error }]);
-        setErrorMessage(`导入失败：${json.errors?.length || 0} 个错误`);
+        setCsvErrors(outcome.errors || [{ row: 0, message: '导入失败' }]);
+        setErrorMessage(`导入失败：${outcome.errors?.length || 0} 个错误`);
       }
-    } catch (error) {
-      console.error('CSV import failed:', error);
-      setErrorMessage('CSV 导入失败');
     } finally {
       setImporting(false);
     }
@@ -1143,6 +1139,7 @@ export default function PortfolioPage() {
                         setCsvFile(files[0]);
                         setCsvPreview(null);
                         setCsvErrors([]);
+                        setCsvWriteFailed(false);
                       }
                     }}
                     className={`
@@ -1164,6 +1161,7 @@ export default function PortfolioPage() {
                           setCsvFile(file);
                           setCsvPreview(null);
                           setCsvErrors([]);
+                          setCsvWriteFailed(false);
                         }
                       }}
                       className="sr-only"
@@ -1178,6 +1176,11 @@ export default function PortfolioPage() {
                       {csvFile && (
                         <p className="text-xs text-accent mt-2">
                           ✓ {csvFile.name}
+                        </p>
+                      )}
+                      {csvWriteFailed && (
+                        <p className="text-down">
+                          {CSV_IMPORT_SERVER_FAILURE_MESSAGE}
                         </p>
                       )}
                     </div>

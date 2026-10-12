@@ -77,7 +77,7 @@ GITHUB_CLIENT_SECRET=your-github-client-secret
 LINE_CHANNEL_SECRET=
 GROKBOT_WEBHOOK_URL=
 GROKBOT_WEBHOOK_KEY=
-# 可选：只转发该群的提及
+# 只转发该群的 @秋宝管家。未配置或为空则一条都不转发
 LINE_ALLOWED_GROUP_ID=
 ```
 
@@ -93,7 +93,7 @@ openssl rand -base64 32
 
 `https://personal-dashboard-pi-nine.vercel.app/api/line/webhook`
 
-Vercel 需要配置：`LINE_CHANNEL_SECRET`、`GROKBOT_WEBHOOK_URL`、`GROKBOT_WEBHOOK_KEY`。可选：`LINE_ALLOWED_GROUP_ID`（只转发该群）。
+Vercel 需要配置：`LINE_CHANNEL_SECRET`、`GROKBOT_WEBHOOK_URL`、`GROKBOT_WEBHOOK_KEY`、`LINE_ALLOWED_GROUP_ID`（只转发该群；未配置或为空则一条都不转发）。
 
 ### 3. 启动开发服务器
 
