@@ -11,6 +11,11 @@ export type LineMentionee = {
 export type LineEvent = {
   type?: string;
   timestamp?: number;
+  webhookEventId?: string;
+  replyToken?: string;
+  deliveryContext?: {
+    isRedelivery?: boolean;
+  };
   source?: {
     type?: string;
     groupId?: string;
@@ -18,7 +23,9 @@ export type LineEvent = {
   };
   message?: {
     type?: string;
+    id?: string;
     text?: string;
+    quoteToken?: string;
     mention?: {
       mentionees?: LineMentionee[];
     };
@@ -26,10 +33,17 @@ export type LineEvent = {
 };
 
 export type ForwardPayload = {
+  v: 1;
   groupId: string;
   userId: string;
   text: string;
-  timestamp: number;
+  messageId: string;
+  webhookEventId: string;
+  replyToken: string;
+  quoteToken: string;
+  eventTs: number;
+  receivedAt: number;
+  isRedelivery: boolean;
 };
 
 export function isBotMentioned(event: LineEvent): boolean {
@@ -70,10 +84,19 @@ export function stripBotMention(text: string, event?: LineEvent): string {
   return text.replace(new RegExp(BOT_MENTION_FALLBACK, 'g'), '').replace(/\s+/g, ' ').trim();
 }
 
+function passthroughString(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
 export function filterForwardableEvents(
   events: unknown,
-  allowedGroupId?: string
+  allowedGroupId?: string,
+  receivedAt: number = 0
 ): ForwardPayload[] {
+  if (!allowedGroupId) {
+    return [];
+  }
+
   if (!Array.isArray(events)) {
     return [];
   }
@@ -93,17 +116,24 @@ export function filterForwardableEvents(
     if (typeof event.source.groupId !== 'string' || event.source.groupId.length === 0) {
       continue;
     }
-    if (allowedGroupId && event.source.groupId !== allowedGroupId) {
+    if (event.source.groupId !== allowedGroupId) {
       continue;
     }
     if (typeof event.message.text !== 'string') continue;
     if (!isBotMentioned(event)) continue;
 
     payloads.push({
+      v: 1,
       groupId: event.source.groupId,
-      userId: typeof event.source.userId === 'string' ? event.source.userId : '',
-      text: stripBotMention(event.message.text, event),
-      timestamp: typeof event.timestamp === 'number' ? event.timestamp : 0,
+      userId: passthroughString(event.source.userId),
+      text: event.message.text,
+      messageId: passthroughString(event.message.id),
+      webhookEventId: passthroughString(event.webhookEventId),
+      replyToken: passthroughString(event.replyToken),
+      quoteToken: passthroughString(event.message.quoteToken),
+      eventTs: typeof event.timestamp === 'number' ? event.timestamp : 0,
+      receivedAt,
+      isRedelivery: event.deliveryContext?.isRedelivery === true,
     });
   }
 

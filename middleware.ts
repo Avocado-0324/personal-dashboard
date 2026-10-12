@@ -19,6 +19,6 @@ export default auth((req) => {
 
 export const config = {
   matcher: [
-    '/((?!auth/signin|api/auth|api/connect/github/callback|api/portfolio/ingest|api/line/webhook|_next/static|_next/image|favicon.ico|.*\\.png|.*\\.jpg|.*\\.jpeg|.*\\.gif|.*\\.svg|.*\\.webp).*)',
+    '/((?!auth/signin|api/auth|api/connect/github/callback|api/portfolio/ingest|api/portfolio/diag|api/line/webhook|_next/static|_next/image|favicon.ico|.*\\.png|.*\\.jpg|.*\\.jpeg|.*\\.gif|.*\\.svg|.*\\.webp).*)',
   ],
 };

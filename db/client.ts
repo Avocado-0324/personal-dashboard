@@ -23,16 +23,25 @@ export function getDb() {
   return _httpDb;
 }
 
+export function getPool() {
+  if (!process.env.DATABASE_URL) {
+    throw new Error('DATABASE_URL not configured');
+  }
+
+  if (!_pool) {
+    _pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  }
+
+  return _pool;
+}
+
 export function getPoolDb() {
   if (!process.env.DATABASE_URL) {
     throw new Error('DATABASE_URL not configured');
   }
   
   if (!_poolDb) {
-    if (!_pool) {
-      _pool = new Pool({ connectionString: process.env.DATABASE_URL });
-    }
-    _poolDb = drizzleWs(_pool, { schema });
+    _poolDb = drizzleWs(getPool(), { schema });
   }
   
   return _poolDb;

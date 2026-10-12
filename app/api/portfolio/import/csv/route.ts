@@ -5,6 +5,7 @@ import { decodeShiftJIS, parseSBIHoldings, computeIdempotencyKey } from '@/modul
 import { recordSnapshotAccounts } from '@/modules/portfolio/snapshot-accounts';
 import { eq, and, sql } from 'drizzle-orm';
 import { isUniqueViolation } from '@/db/utils';
+import { logWriteError } from '@/lib/write-error-log';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,19 +19,31 @@ const MAX_FILE_SIZE = 1024 * 1024; // 1MB
  * - 文件中未出现的账户不受影响，保持原有持仓不变
  */
 
+const CSV_ROUTE = '/api/portfolio/import/csv';
+
 export async function POST(request: NextRequest) {
   try {
     if (!isDatabaseConfigured()) {
+      logWriteError(CSV_ROUTE, 'connect', new Error('DATABASE_URL not configured'));
       return NextResponse.json(
         { error: '数据库未配置' },
         { status: 500, headers: { 'Cache-Control': 'no-store' } }
       );
     }
 
-    const searchParams = request.nextUrl.searchParams;
-    const dryRun = searchParams.get('dryRun') === '1';
+    let dryRun: boolean;
+    let formData: FormData;
+    try {
+      dryRun = request.nextUrl.searchParams.get('dryRun') === '1';
+      formData = await request.formData();
+    } catch (error) {
+      logWriteError(CSV_ROUTE, 'parse', error);
+      return NextResponse.json(
+        { error: '导入失败' },
+        { status: 500, headers: { 'Cache-Control': 'no-store' } }
+      );
+    }
 
-    const formData = await request.formData();
     const file = formData.get('file') as File | null;
     const asOf = formData.get('asOf') as string;
 
@@ -55,16 +68,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Shift_JIS 解码
-    const buffer = await file.arrayBuffer();
-    const fileBuffer = Buffer.from(buffer);
-    const csvText = decodeShiftJIS(buffer);
-    
-    // 计算幂等键（不含 accountName）
-    const idempotencyKey = computeIdempotencyKey(fileBuffer, asOf);
-
-    // 解析
-    const { positions: parsedPositions, errors, accountSummaries } = parseSBIHoldings(csvText);
+    let fileBuffer: Buffer;
+    let csvText: string;
+    let idempotencyKey: string;
+    let parsedPositions: ReturnType<typeof parseSBIHoldings>['positions'];
+    let errors: ReturnType<typeof parseSBIHoldings>['errors'];
+    let accountSummaries: ReturnType<typeof parseSBIHoldings>['accountSummaries'];
+    try {
+      const buffer = await file.arrayBuffer();
+      fileBuffer = Buffer.from(buffer);
+      csvText = decodeShiftJIS(buffer);
+      idempotencyKey = computeIdempotencyKey(fileBuffer, asOf);
+      ({ positions: parsedPositions, errors, accountSummaries } = parseSBIHoldings(csvText));
+    } catch (error) {
+      logWriteError(CSV_ROUTE, 'parse', error);
+      return NextResponse.json(
+        { error: '导入失败' },
+        { status: 500, headers: { 'Cache-Control': 'no-store' } }
+      );
+    }
 
     if (dryRun) {
       // dry-run：返回预览
@@ -92,17 +114,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 检查幂等键（只对未撤销的批次）
-    const db = getPoolDb();
-    
-    const existingBatches = await db
-      .select()
-      .from(importBatches)
-      .where(and(
-        eq(importBatches.idempotencyKey, idempotencyKey),
-        sql`${importBatches.status} <> 'reverted'`
-      ))
-      .limit(1);
+    let db: ReturnType<typeof getPoolDb>;
+    let existingBatches: Array<typeof importBatches.$inferSelect>;
+    try {
+      db = getPoolDb();
+      existingBatches = await db
+        .select()
+        .from(importBatches)
+        .where(and(
+          eq(importBatches.idempotencyKey, idempotencyKey),
+          sql`${importBatches.status} <> 'reverted'`
+        ))
+        .limit(1);
+    } catch (error) {
+      logWriteError(CSV_ROUTE, 'connect', error);
+      return NextResponse.json(
+        { error: '导入失败' },
+        { status: 500, headers: { 'Cache-Control': 'no-store' } }
+      );
+    }
     
     if (existingBatches.length > 0 && existingBatches[0].status === 'committed') {
       const batch = existingBatches[0];
@@ -289,7 +319,7 @@ export async function POST(request: NextRequest) {
       }
       
       // 其他事务失败
-      console.error('Transaction failed:', txError);
+      logWriteError(CSV_ROUTE, 'transaction', txError);
       return NextResponse.json(
         {
           imported: 0,
@@ -299,7 +329,7 @@ export async function POST(request: NextRequest) {
       );
     }
   } catch (error) {
-    console.error('CSV import error:', error);
+    logWriteError(CSV_ROUTE, 'other', error);
     return NextResponse.json(
       { error: '导入失败' },
       { status: 500, headers: { 'Cache-Control': 'no-store' } }
