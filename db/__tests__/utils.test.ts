@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@jest/globals';
-import { isUniqueViolation } from '@/db/utils';
+import { isPgUniqueViolation, isUniqueViolation } from '@/db/utils';
 
 describe('isUniqueViolation', () => {
   const CONSTRAINT_NAME = 'import_batches_idempotency_key_unique_not_reverted';
@@ -87,5 +87,21 @@ describe('isUniqueViolation', () => {
       code: '23505',
     };
     expect(isUniqueViolation(error, CONSTRAINT_NAME)).toBe(false);
+  });
+});
+
+describe('isPgUniqueViolation', () => {
+  it('只认 23505，不比对约束名', () => {
+    expect(isPgUniqueViolation({ code: '23505' })).toBe(true);
+    expect(isPgUniqueViolation({
+      code: '23505',
+      constraint: 'positions_snapshot_id_account_id_instrument_id_key',
+    })).toBe(true);
+    expect(isPgUniqueViolation({
+      message: 'wrapped',
+      cause: { code: '23505', constraint: 'anything' },
+    })).toBe(true);
+    expect(isPgUniqueViolation({ code: '23503' })).toBe(false);
+    expect(isPgUniqueViolation(null)).toBe(false);
   });
 });

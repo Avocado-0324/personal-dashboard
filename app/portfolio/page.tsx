@@ -6,7 +6,7 @@ import Decimal from 'decimal.js';
 import { calculateXIRR, marketValueJpyFloor, cashValueJpyFloor } from '@/modules/portfolio/calculations';
 import { getUserSettings } from '@/lib/user-settings';
 import { getAllModules } from '@/lib/module-registry';
-import { formatAsOfMd, displayHoldingTitle, formatQuantity } from '@/modules/portfolio/display';
+import { formatAsOfMd, displayHoldingTitle, displayHoldingCode, formatQuantity } from '@/modules/portfolio/display';
 import { isFxRateString } from '@/lib/validation';
 import {
   CSV_IMPORT_SERVER_FAILURE_MESSAGE,
@@ -784,6 +784,11 @@ export default function PortfolioPage() {
                                       pos.instrument.symbol,
                                       pos.instrument.name,
                                     );
+                                    const code = displayHoldingCode(
+                                      pos.instrument.assetClass,
+                                      pos.instrument.symbol,
+                                      pos.instrument.name,
+                                    );
 
                                     return (
                                       <Fragment key={pos.position.id}>
@@ -794,7 +799,7 @@ export default function PortfolioPage() {
                                             <div className="text-xs text-muted">{subtitle}</div>
                                           )}
                                         </td>
-                                        <td className="py-3 text-muted">{pos.instrument.symbol}</td>
+                                        <td className="py-3 text-muted">{code ?? ''}</td>
                                         <td className="py-3">
                                           <div className="flex items-center gap-2">
                                             <select
@@ -1291,6 +1296,7 @@ export default function PortfolioPage() {
                       className="w-full px-3 py-2 bg-card-bg border border-card-border rounded text-foreground"
                     />
                     <select
+                      aria-label="账户类型"
                       value={newAccount.type}
                       onChange={(e) => setNewAccount({ ...newAccount, type: e.target.value })}
                       className="w-full px-3 py-2 bg-card-bg border border-card-border rounded text-foreground"
@@ -1298,7 +1304,6 @@ export default function PortfolioPage() {
                       <option value="tokutei">特定</option>
                       <option value="nisa_growth">NISA 成长</option>
                       <option value="nisa_tsumitate">NISA 积立</option>
-                      <option value="cash">现金</option>
                       <option value="other">其他</option>
                     </select>
                     <p className="text-xs text-warn">保存后会替换该账户在这个日期的全部持仓和现金</p>

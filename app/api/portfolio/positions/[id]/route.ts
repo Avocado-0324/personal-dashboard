@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getPoolDb, isDatabaseConfigured } from '@/db/client';
+import { isDatabaseConfigured } from '@/db/client';
 import { isUuid } from '@/lib/validation';
-import { movePositionToAccount } from '@/modules/portfolio/move-position';
+import { movePositionHttp } from '@/modules/portfolio/http-writes';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,10 +36,7 @@ export async function PATCH(
       );
     }
 
-    const db = getPoolDb();
-    const result = await db.transaction(async (tx) => {
-      return movePositionToAccount(tx, id, accountId);
-    });
+    const result = await movePositionHttp(id, accountId);
 
     if (!result.ok) {
       return NextResponse.json(

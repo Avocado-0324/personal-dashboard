@@ -8,8 +8,7 @@ jest.mock('@/lib/auth', () => ({
 
 jest.mock('@/db/diag', () => ({
   probeHttpSelect1: jest.fn(),
-  probeWsPoolConnect: jest.fn(),
-  probeWsEmptyTransaction: jest.fn(),
+  probeHttpTransaction: jest.fn(),
 }));
 
 import { GET } from '../route';

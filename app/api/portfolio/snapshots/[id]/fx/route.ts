@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getPoolDb, isDatabaseConfigured } from '@/db/client';
-import { positions, cashBalances } from '@/db/schema';
-import { eq, and, sql } from 'drizzle-orm';
+import { isDatabaseConfigured } from '@/db/client';
 import Decimal from 'decimal.js';
 import { isCurrencyCode, isFxRateString, isUuid } from '@/lib/validation';
+import { updateSnapshotFxRate } from '@/modules/portfolio/http-writes';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +19,7 @@ export async function PATCH(
         { status: 400 }
       );
     }
-    
+
     if (!isDatabaseConfigured()) {
       return NextResponse.json(
         { error: '数据库未配置' },
@@ -76,50 +75,7 @@ export async function PATCH(
       );
     }
 
-    const db = getPoolDb();
-    let updatedCount = 0;
-
-    await db.transaction(async (tx) => {
-      // 查询该快照的所有指定币种的持仓
-      const positionsToUpdate = await tx
-        .select({ id: positions.id })
-        .from(positions)
-        .innerJoin(sql`(SELECT id, currency FROM instruments) AS instruments`, sql`positions.instrument_id = instruments.id`)
-        .where(and(
-          eq(positions.snapshotId, id),
-          sql`instruments.currency = ${currency}`
-        ));
-
-      // 更新持仓汇率
-      if (positionsToUpdate.length > 0) {
-        for (const pos of positionsToUpdate) {
-          await tx
-            .update(positions)
-            .set({ fxRateToJpy: rateToJpy })
-            .where(eq(positions.id, pos.id));
-          updatedCount++;
-        }
-      }
-
-      // 更新现金余额汇率
-      const cashToUpdate = await tx
-        .select({ id: cashBalances.id })
-        .from(cashBalances)
-        .where(and(
-          eq(cashBalances.snapshotId, id),
-          eq(cashBalances.currency, currency)
-        ));
-
-      if (cashToUpdate.length > 0) {
-        for (const cash of cashToUpdate) {
-          await tx
-            .update(cashBalances)
-            .set({ fxRateToJpy: rateToJpy })
-            .where(eq(cashBalances.id, cash.id));
-          updatedCount++;
-        }
-      }
-    });
+    const { updatedCount } = await updateSnapshotFxRate(id, currency, rateToJpy);
 
     return NextResponse.json(
       { updatedCount },

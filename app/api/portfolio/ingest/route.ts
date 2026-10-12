@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { getPoolDb, isDatabaseConfigured } from '@/db/client';
-import { importBatches, snapshots, accounts, instruments, positions, cashBalances, cashFlows } from '@/db/schema';
+import { getDb, isDatabaseConfigured } from '@/db/client';
+import { importBatches } from '@/db/schema';
 import { eq, sql, and } from 'drizzle-orm';
 import { timingSafeEqual } from 'crypto';
-import { isUniqueViolation } from '@/db/utils';
-import { recordSnapshotAccounts } from '@/modules/portfolio/snapshot-accounts';
 import { CURRENCY_RE } from '@/lib/validation';
 import { logWriteError } from '@/lib/write-error-log';
+import {
+  IdempotentConflictError,
+  commitIngest,
+  formatImportTimeZh,
+} from '@/modules/portfolio/http-writes';
 
 const INGEST_ROUTE = '/api/portfolio/ingest';
 
@@ -49,9 +52,40 @@ const IngestSchema = z.object({
   })).optional(),
 }).strict();
 
+function alreadyImportedResponse(batch: { id: string; createdAt: Date | null }) {
+  const timeStr = formatImportTimeZh(batch.createdAt);
+  return NextResponse.json(
+    {
+      batchId: batch.id,
+      inserted: {
+        positions: 0,
+        cashFlows: 0,
+        message: `这个批次已经导入过（${timeStr}），没有重复写入`,
+      },
+      alreadyImported: true,
+    },
+    {
+      headers: {
+        'Cache-Control': 'no-store',
+      },
+    }
+  );
+}
+
+async function findCommittedBatch(idempotencyKey: string) {
+  const db = getDb();
+  return db
+    .select()
+    .from(importBatches)
+    .where(and(
+      eq(importBatches.idempotencyKey, idempotencyKey),
+      sql`${importBatches.status} <> 'reverted'`
+    ))
+    .limit(1);
+}
+
 export async function POST(request: NextRequest) {
   try {
-    // 验证密钥
     const authHeader = request.headers.get('authorization');
     const expectedKey = process.env.PORTFOLIO_INGEST_KEY;
 
@@ -71,18 +105,17 @@ export async function POST(request: NextRequest) {
     }
 
     const providedKey = authHeader.slice(7);
-    
-    // 长度检查，避免 timingSafeEqual throw
+
     const expectedBuffer = Buffer.from(expectedKey);
     const providedBuffer = Buffer.from(providedKey);
-    
+
     if (expectedBuffer.length !== providedBuffer.length) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
       );
     }
-    
+
     if (!timingSafeEqual(expectedBuffer, providedBuffer)) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -91,7 +124,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!isDatabaseConfigured()) {
-      logWriteError(INGEST_ROUTE, 'connect', new Error('DATABASE_URL not configured'));
+      logWriteError(INGEST_ROUTE, 'write', new Error('DATABASE_URL not configured'));
       return NextResponse.json(
         { error: '写入失败' },
         { status: 500 }
@@ -116,254 +149,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let db: ReturnType<typeof getPoolDb>;
     let existingBatches: Array<typeof importBatches.$inferSelect>;
     try {
-      db = getPoolDb();
-      existingBatches = await db
-        .select()
-        .from(importBatches)
-        .where(and(
-          eq(importBatches.idempotencyKey, data.idempotencyKey),
-          sql`${importBatches.status} <> 'reverted'`
-        ))
-        .limit(1);
+      existingBatches = await findCommittedBatch(data.idempotencyKey);
     } catch (error) {
-      logWriteError(INGEST_ROUTE, 'connect', error);
+      logWriteError(INGEST_ROUTE, 'write', error);
       return NextResponse.json(
         { error: '写入失败' },
         { status: 500 }
       );
     }
-    
+
     const existingBatch = existingBatches[0];
 
     if (existingBatch && existingBatch.status === 'committed') {
-      const importTime = new Date(existingBatch.createdAt!);
-      const timeStr = importTime.toLocaleString('zh-CN', {
-        timeZone: 'Asia/Tokyo',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      }).replace('月', '月').replace('日', '日');
-      
-      return NextResponse.json(
-        {
-          batchId: existingBatch.id,
-          inserted: {
-            positions: 0,
-            cashFlows: 0,
-            message: `这个批次已经导入过（${timeStr}），没有重复写入`,
-          },
-          alreadyImported: true,
-        },
-        {
-          headers: {
-            'Cache-Control': 'no-store',
-          },
-        }
-      );
+      return alreadyImportedResponse(existingBatch);
     }
 
-    let positionsInserted = 0;
-    let cashFlowsInserted = 0;
-    let batchId: string;
-
     try {
-      // 在事务中执行所有操作
-      await db.transaction(async (tx) => {
-        // 创建批次
-      const [batch] = await tx
-        .insert(importBatches)
-        .values({
-          source: 'screenshot',
-          idempotencyKey: data.idempotencyKey,
-          status: 'committed',
-        })
-        .returning();
-
-      batchId = batch.id;
-
-      // 创建快照
-      const [snapshot] = await tx
-        .insert(snapshots)
-        .values({
-          asOf: data.asOf,
-          source: 'screenshot',
-          batchId: batch.id,
-        })
-        .returning();
-
-      // 创建账户（如果提供）
-      const accountMap = new Map<string, string>();
-      if (data.accounts) {
-        for (const acc of data.accounts) {
-          const [account] = await tx
-            .insert(accounts)
-            .values(acc)
-            .returning();
-          accountMap.set(acc.name, account.id);
-        }
-      }
-
-      // 插入持仓
-      if (data.positions) {
-        for (const pos of data.positions) {
-          // 获取或创建账户
-          let accountId = accountMap.get(pos.accountName);
-          if (!accountId) {
-            const existingAccounts = await tx
-              .select()
-              .from(accounts)
-              .where(eq(accounts.name, pos.accountName))
-              .limit(1);
-            
-            if (existingAccounts.length > 0) {
-              accountId = existingAccounts[0].id;
-            } else {
-              const [newAccount] = await tx
-                .insert(accounts)
-                .values({
-                  name: pos.accountName,
-                  type: 'other',
-                })
-                .returning();
-              accountId = newAccount.id;
-              accountMap.set(pos.accountName, accountId);
-            }
-          }
-
-          // 获取或创建 instrument（按 symbol + currency）
-          const existingInstruments = await tx
-            .select()
-            .from(instruments)
-            .where(and(
-              eq(instruments.symbol, pos.symbol),
-              eq(instruments.currency, pos.currency)
-            ))
-            .limit(1);
-          
-          let instrument = existingInstruments[0];
-
-          if (!instrument) {
-            [instrument] = await tx
-              .insert(instruments)
-              .values({
-                symbol: pos.symbol,
-                name: pos.name,
-                assetClass: pos.assetClass,
-                currency: pos.currency,
-                unitBasis: pos.unitBasis || (pos.assetClass === 'fund' ? '10000' : '1'),
-              })
-              .returning();
-          }
-
-          await tx.insert(positions).values({
-            snapshotId: snapshot.id,
-            accountId,
-            instrumentId: instrument.id,
-            quantity: pos.quantity,
-            avgCost: pos.avgCost,
-            price: pos.price,
-            fxRateToJpy: pos.currency === 'JPY' 
-              ? (pos.fxRateToJpy && pos.fxRateToJpy !== '' ? pos.fxRateToJpy : '1')
-              : (pos.fxRateToJpy && pos.fxRateToJpy !== '' ? pos.fxRateToJpy : null),
-          });
-
-          positionsInserted++;
-        }
-      }
-
-      // 插入现金余额
-      if (data.cashBalances) {
-        for (const cash of data.cashBalances) {
-          let accountId = accountMap.get(cash.accountName);
-          if (!accountId) {
-            const existingAccounts = await tx
-              .select()
-              .from(accounts)
-              .where(eq(accounts.name, cash.accountName))
-              .limit(1);
-            
-            if (existingAccounts.length > 0) {
-              accountId = existingAccounts[0].id;
-            } else {
-              const [newAccount] = await tx
-                .insert(accounts)
-                .values({
-                  name: cash.accountName,
-                  type: 'cash',
-                })
-                .returning();
-              accountId = newAccount.id;
-              accountMap.set(cash.accountName, accountId);
-            }
-          }
-
-          await tx.insert(cashBalances).values({
-            snapshotId: snapshot.id,
-            accountId,
-            currency: cash.currency,
-            amount: cash.amount,
-            fxRateToJpy: cash.fxRateToJpy && cash.fxRateToJpy !== ''
-              ? cash.fxRateToJpy
-              : (cash.currency === 'JPY' ? '1' : null),
-          });
-        }
-      }
-
-      // 插入现金流
-      if (data.cashFlows) {
-        for (const flow of data.cashFlows) {
-          let accountId: string | null = null;
-          
-          if (flow.accountName) {
-            accountId = accountMap.get(flow.accountName) || null;
-            if (!accountId) {
-              const existingAccounts = await tx
-                .select()
-                .from(accounts)
-                .where(eq(accounts.name, flow.accountName))
-                .limit(1);
-              
-              if (existingAccounts.length > 0) {
-                accountId = existingAccounts[0].id;
-              }
-            }
-          }
-
-          await tx.insert(cashFlows).values({
-            accountId,
-            date: flow.date,
-            direction: flow.direction,
-            amountJpy: flow.amountJpy,
-            note: flow.note,
-            source: 'screenshot',
-            batchId: batch.id,
-          });
-
-          cashFlowsInserted++;
-        }
-      }
-
-      await recordSnapshotAccounts(tx, snapshot.id, accountMap.values());
-
-      // 更新批次的行数
-      await tx
-        .update(importBatches)
-        .set({
-          rowCount: positionsInserted + cashFlowsInserted,
-        })
-        .where(eq(importBatches.id, batch.id));
+      const result = await commitIngest({
+        idempotencyKey: data.idempotencyKey,
+        asOf: data.asOf,
+        accounts: data.accounts,
+        positions: data.positions,
+        cashBalances: data.cashBalances,
+        cashFlows: data.cashFlows,
       });
 
       return NextResponse.json(
         {
-          batchId: batchId!,
+          batchId: result.batchId,
           inserted: {
-            positions: positionsInserted,
-            cashFlows: cashFlowsInserted,
+            positions: result.positionsInserted,
+            cashFlows: result.cashFlowsInserted,
           },
         },
         {
@@ -373,51 +191,15 @@ export async function POST(request: NextRequest) {
           },
         }
       );
-    } catch (txError: any) {
-      // 处理唯一约束冲突（并发导入）
-      if (isUniqueViolation(txError, 'import_batches_idempotency_key_unique_not_reverted')) {
-        // 并发冲突，重新查询已导入的批次
-        const existingBatches = await db
-          .select()
-          .from(importBatches)
-          .where(and(
-            eq(importBatches.idempotencyKey, data.idempotencyKey),
-            sql`${importBatches.status} <> 'reverted'`
-          ))
-          .limit(1);
-        
-        if (existingBatches.length > 0) {
-          const batch = existingBatches[0];
-          const importTime = new Date(batch.createdAt!);
-          const timeStr = importTime.toLocaleString('zh-CN', {
-            timeZone: 'Asia/Tokyo',
-            month: 'long',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-          }).replace('月', '月').replace('日', '日');
-          
-          return NextResponse.json(
-            {
-              batchId: batch.id,
-              inserted: {
-                positions: 0,
-                cashFlows: 0,
-                message: `这个批次已经导入过（${timeStr}），没有重复写入`,
-              },
-              alreadyImported: true,
-            },
-            {
-              headers: {
-                'Cache-Control': 'no-store',
-              },
-            }
-          );
+    } catch (txError) {
+      if (txError instanceof IdempotentConflictError) {
+        const raced = await findCommittedBatch(data.idempotencyKey);
+        if (raced.length > 0) {
+          return alreadyImportedResponse(raced[0]);
         }
       }
-      
-      // 其他事务失败
-      logWriteError(INGEST_ROUTE, 'transaction', txError);
+
+      logWriteError(INGEST_ROUTE, 'write', txError);
       return NextResponse.json(
         { error: '写入失败' },
         { status: 500 }

@@ -100,24 +100,28 @@ export function isUsStock(assetClass: string): boolean {
   return assetClass === 'us_stock';
 }
 
-export const TAX_ALLOCATION_ORDER = ['nisa', 'tokutei', 'cash'] as const;
+export const TAX_ALLOCATION_ORDER = ['nisa', 'tokutei', 'other', 'cash'] as const;
 export type TaxAllocationKey = (typeof TAX_ALLOCATION_ORDER)[number];
 
 export const TAX_ALLOCATION_LABELS: Record<TaxAllocationKey, string> = {
   nisa: 'NISA',
   tokutei: '特定',
+  other: '其他',
   cash: '现金',
 };
 
 export const TAX_SEGMENT_COLORS: Record<TaxAllocationKey, { bar: string; text: string }> = {
   nisa: { bar: 'bg-accent', text: 'text-accent' },
   tokutei: { bar: 'bg-accent/45', text: 'text-accent/45' },
+  other: { bar: 'bg-warn/60', text: 'text-warn' },
   cash: { bar: 'bg-muted/50', text: 'text-muted/50' },
 };
 
 export function taxBucketForAccountType(accountType: string): Exclude<TaxAllocationKey, 'cash'> | null {
   if (isNisaType(accountType)) return 'nisa';
-  if (accountType === 'tokutei' || accountType === 'other' || accountType === 'cash') return 'tokutei';
+  if (accountType === 'tokutei') return 'tokutei';
+  if (accountType === 'other') return 'other';
+  if (accountType === 'cash') return 'tokutei';
   return null;
 }
 
@@ -129,6 +133,7 @@ export function buildTaxAllocation(params: {
   const buckets: Record<TaxAllocationKey, Decimal> = {
     nisa: new Decimal(0),
     tokutei: new Decimal(0),
+    other: new Decimal(0),
     cash: params.cashTotal,
   };
 
@@ -159,6 +164,12 @@ export function displayHoldingTitle(assetClass: string, symbol: string, name: st
     return { title: symbol, subtitle: name };
   }
   return { title: name, subtitle: null };
+}
+
+export function displayHoldingCode(assetClass: string, symbol: string, name: string): string | null {
+  const { title } = displayHoldingTitle(assetClass, symbol, name);
+  if (title === symbol) return null;
+  return symbol;
 }
 
 export type { AccountType, AssetClass };

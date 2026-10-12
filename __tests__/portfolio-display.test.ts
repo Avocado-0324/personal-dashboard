@@ -7,6 +7,7 @@ import {
   mergeHoldingsByInstrument,
   buildTaxAllocation,
   displayHoldingTitle,
+  displayHoldingCode,
   formatQuantity,
   TAX_SEGMENT_COLORS,
 } from '../modules/portfolio/display';
@@ -107,6 +108,11 @@ describe('display helpers', () => {
     });
   });
 
+  it('美股代码列不与标题重复', () => {
+    expect(displayHoldingCode('us_stock', 'VOO', 'バンガード')).toBeNull();
+    expect(displayHoldingCode('jp_stock', '7203', 'トヨタ自動車')).toBe('7203');
+  });
+
   it('分布条按 NISA / 特定 / 现金 三段，日美合并', () => {
     const alloc = buildTaxAllocation({
       holdings: [
@@ -136,6 +142,20 @@ describe('display helpers', () => {
     expect(alloc.map(a => a.accountType)).toEqual(['tokutei', 'cash']);
     expect(TAX_SEGMENT_COLORS[alloc[0].accountType as 'tokutei'].bar).toBe('bg-accent/45');
     expect(TAX_SEGMENT_COLORS[alloc[1].accountType as 'cash'].bar).toBe('bg-muted/50');
+  });
+
+  it('other 账户不并进特定', () => {
+    const alloc = buildTaxAllocation({
+      holdings: [
+        { accountType: 'tokutei', value: new Decimal(100) },
+        { accountType: 'other', value: new Decimal(50) },
+      ],
+      cashTotal: new Decimal(0),
+      totalValue: new Decimal(150),
+    });
+    expect(alloc.find(a => a.accountType === 'tokutei')?.valueJpy).toBe('100');
+    expect(alloc.find(a => a.accountType === 'other')?.valueJpy).toBe('50');
+    expect(alloc.find(a => a.accountType === 'other')?.label).toBe('其他');
   });
 
   it('formatQuantity 整数加千分位', () => {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { timingSafeEqual } from 'crypto';
 import { auth } from '@/lib/auth';
-import { probeHttpSelect1, probeWsEmptyTransaction, probeWsPoolConnect } from '@/db/diag';
+import { probeHttpSelect1, probeHttpTransaction } from '@/db/diag';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -40,17 +40,15 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const [httpSelect1, wsPoolConnect, wsEmptyTransaction] = await Promise.all([
+  const [httpSelect1, httpTransaction] = await Promise.all([
     probeHttpSelect1(),
-    probeWsPoolConnect(),
-    probeWsEmptyTransaction(),
+    probeHttpTransaction(),
   ]);
 
   return NextResponse.json(
     {
       httpSelect1,
-      wsPoolConnect,
-      wsEmptyTransaction,
+      httpTransaction,
     },
     { headers: { 'Cache-Control': 'no-store' } }
   );

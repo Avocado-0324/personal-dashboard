@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getPoolDb, isDatabaseConfigured } from '@/db/client';
-import { accounts, snapshots, instruments, positions, importBatches } from '@/db/schema';
+import { getDb, isDatabaseConfigured } from '@/db/client';
+import { importBatches } from '@/db/schema';
 import { decodeShiftJIS, parseSBIHoldings, computeIdempotencyKey } from '@/modules/portfolio/import/sbi';
-import { recordSnapshotAccounts } from '@/modules/portfolio/snapshot-accounts';
-import { eq, and, sql } from 'drizzle-orm';
-import { isUniqueViolation } from '@/db/utils';
+import { and, eq, sql } from 'drizzle-orm';
 import { logWriteError } from '@/lib/write-error-log';
+import {
+  IdempotentConflictError,
+  commitCsvImport,
+  formatImportTimeZh,
+} from '@/modules/portfolio/http-writes';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,10 +24,37 @@ const MAX_FILE_SIZE = 1024 * 1024; // 1MB
 
 const CSV_ROUTE = '/api/portfolio/import/csv';
 
+function alreadyImportedResponse(batch: { id: string; rowCount: number | null; createdAt: Date | null }) {
+  const timeStr = formatImportTimeZh(batch.createdAt);
+  return NextResponse.json(
+    {
+      imported: batch.rowCount || 0,
+      errors: [],
+      skipped: 0,
+      message: `这个文件已经导入过（${timeStr}），没有重复写入`,
+      batchId: batch.id,
+      alreadyImported: true,
+    },
+    { headers: { 'Cache-Control': 'no-store' } }
+  );
+}
+
+async function findCommittedBatch(idempotencyKey: string) {
+  const db = getDb();
+  return db
+    .select()
+    .from(importBatches)
+    .where(and(
+      eq(importBatches.idempotencyKey, idempotencyKey),
+      sql`${importBatches.status} <> 'reverted'`
+    ))
+    .limit(1);
+}
+
 export async function POST(request: NextRequest) {
   try {
     if (!isDatabaseConfigured()) {
-      logWriteError(CSV_ROUTE, 'connect', new Error('DATABASE_URL not configured'));
+      logWriteError(CSV_ROUTE, 'write', new Error('DATABASE_URL not configured'));
       return NextResponse.json(
         { error: '数据库未配置' },
         { status: 500, headers: { 'Cache-Control': 'no-store' } }
@@ -89,7 +119,6 @@ export async function POST(request: NextRequest) {
     }
 
     if (dryRun) {
-      // dry-run：返回预览
       return NextResponse.json(
         {
           accountSummaries: accountSummaries.map(s => ({
@@ -106,7 +135,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 有错误则中断
     if (errors.length > 0) {
       return NextResponse.json(
         { errors, imported: 0 },
@@ -114,161 +142,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let db: ReturnType<typeof getPoolDb>;
     let existingBatches: Array<typeof importBatches.$inferSelect>;
     try {
-      db = getPoolDb();
-      existingBatches = await db
-        .select()
-        .from(importBatches)
-        .where(and(
-          eq(importBatches.idempotencyKey, idempotencyKey),
-          sql`${importBatches.status} <> 'reverted'`
-        ))
-        .limit(1);
+      existingBatches = await findCommittedBatch(idempotencyKey);
     } catch (error) {
-      logWriteError(CSV_ROUTE, 'connect', error);
+      logWriteError(CSV_ROUTE, 'write', error);
       return NextResponse.json(
         { error: '导入失败' },
         { status: 500, headers: { 'Cache-Control': 'no-store' } }
       );
     }
-    
+
     if (existingBatches.length > 0 && existingBatches[0].status === 'committed') {
-      const batch = existingBatches[0];
-      const importTime = new Date(batch.createdAt!);
-      const timeStr = importTime.toLocaleString('zh-CN', {
-        timeZone: 'Asia/Tokyo',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      }).replace('月', '月').replace('日', '日');
-      
-      return NextResponse.json(
-        {
-          imported: batch.rowCount || 0,
-          errors: [],
-          skipped: 0,
-          message: `这个文件已经导入过（${timeStr}），没有重复写入`,
-          batchId: batch.id,
-          alreadyImported: true,
-        },
-        { headers: { 'Cache-Control': 'no-store' } }
-      );
+      return alreadyImportedResponse(existingBatches[0]);
     }
 
     try {
-      let createdBatchId: string | undefined;
-      // 事务开始
-      await db.transaction(async (tx) => {
-        // 文件里出现过的每个账户都要落 snapshot_accounts（0 条持仓的空段也要写）
-        const accountMap = new Map<string, string>();
-
-        for (const summary of accountSummaries) {
-          const existingAccounts = await tx
-            .select()
-            .from(accounts)
-            .where(eq(accounts.name, summary.accountName))
-            .limit(1);
-
-          const accountType = summary.accountType;
-
-          let accountId: string;
-          if (existingAccounts.length === 0) {
-            const [newAccount] = await tx
-              .insert(accounts)
-              .values({
-                name: summary.accountName,
-                type: accountType,
-                broker: 'SBI',
-              })
-              .returning();
-            accountId = newAccount.id;
-          } else {
-            const existingAccount = existingAccounts[0];
-            accountId = existingAccount.id;
-
-            if (existingAccount.type !== accountType) {
-              await tx
-                .update(accounts)
-                .set({ type: accountType })
-                .where(eq(accounts.id, accountId));
-            }
-          }
-
-          accountMap.set(summary.accountName, accountId);
-        }
-
-        // 创建批次
-        const [batch] = await tx
-          .insert(importBatches)
-          .values({
-            source: 'csv',
-            idempotencyKey,
-            filename: file.name,
-            rowCount: parsedPositions.length,
-            status: 'committed',
-          })
-          .returning();
-        createdBatchId = batch.id;
-
-        // 创建快照
-        const [snapshot] = await tx
-          .insert(snapshots)
-          .values({
-            asOf,
-            source: 'csv',
-            batchId: batch.id,
-          })
-          .returning();
-
-        // 写入各持仓
-        for (const pos of parsedPositions) {
-          const accountId = accountMap.get(pos.accountName)!;
-          
-          // 获取或创建 Instrument
-          // 股票：按 symbol + JPY
-          // 基金：按 symbol（已标准化）+ JPY
-          let instrumentRecords = await tx
-            .select()
-            .from(instruments)
-            .where(and(
-              eq(instruments.symbol, pos.symbol),
-              eq(instruments.currency, 'JPY')
-            ))
-            .limit(1);
-
-          let instrumentId: string;
-          if (instrumentRecords.length === 0) {
-            const [newInstrument] = await tx
-              .insert(instruments)
-              .values({
-                symbol: pos.symbol,
-                name: pos.name,
-                assetClass: pos.assetClass,
-                currency: 'JPY',
-                unitBasis: pos.unitBasis,
-              })
-              .returning();
-            instrumentId = newInstrument.id;
-          } else {
-            instrumentId = instrumentRecords[0].id;
-          }
-
-          // Position 创建
-          await tx.insert(positions).values({
-            snapshotId: snapshot.id,
-            accountId,
-            instrumentId,
-            quantity: pos.quantity,
-            avgCost: pos.avgCost,
-            price: pos.price,
-            fxRateToJpy: '1', // JPY 汇率固定为 1
-          });
-        }
-
-        await recordSnapshotAccounts(tx, snapshot.id, accountMap.values());
+      const { batchId } = await commitCsvImport({
+        asOf,
+        filename: file.name,
+        idempotencyKey,
+        accountSummaries,
+        positions: parsedPositions,
       });
 
       return NextResponse.json(
@@ -276,50 +171,19 @@ export async function POST(request: NextRequest) {
           imported: parsedPositions.length,
           errors: [],
           skipped: 0,
-          batchId: createdBatchId,
+          batchId,
         },
         { headers: { 'Cache-Control': 'no-store' } }
       );
-    } catch (txError: any) {
-      // 处理唯一约束冲突（并发导入）
-      if (isUniqueViolation(txError, 'import_batches_idempotency_key_unique_not_reverted')) {
-        // 并发冲突，重新查询已导入的批次
-        const existingBatches = await db
-          .select()
-          .from(importBatches)
-          .where(and(
-            eq(importBatches.idempotencyKey, idempotencyKey),
-            sql`${importBatches.status} <> 'reverted'`
-          ))
-          .limit(1);
-        
-        if (existingBatches.length > 0) {
-          const batch = existingBatches[0];
-          const importTime = new Date(batch.createdAt!);
-          const timeStr = importTime.toLocaleString('zh-CN', {
-            timeZone: 'Asia/Tokyo',
-            month: 'long',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-          }).replace('月', '月').replace('日', '日');
-          
-          return NextResponse.json(
-            {
-              imported: batch.rowCount || 0,
-              errors: [],
-              skipped: 0,
-              message: `这个文件已经导入过（${timeStr}），没有重复写入`,
-              batchId: batch.id,
-              alreadyImported: true,
-            },
-            { headers: { 'Cache-Control': 'no-store' } }
-          );
+    } catch (txError) {
+      if (txError instanceof IdempotentConflictError || (txError && typeof txError === 'object' && (txError as { name?: string }).name === 'IdempotentConflictError')) {
+        const raced = await findCommittedBatch(idempotencyKey);
+        if (raced.length > 0) {
+          return alreadyImportedResponse(raced[0]);
         }
       }
-      
-      // 其他事务失败
-      logWriteError(CSV_ROUTE, 'transaction', txError);
+
+      logWriteError(CSV_ROUTE, 'write', txError);
       return NextResponse.json(
         {
           imported: 0,
